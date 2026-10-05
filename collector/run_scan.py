@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import requests
@@ -7,6 +8,34 @@ from bs4 import BeautifulSoup
 from adapters.google_news_rss import GoogleNewsAdapter
 from extract import extract_layoff_facts
 from match import process_candidate
+
+def pre_filter_candidates(candidates):
+    """
+    Filters a list of RSS entry dictionaries based on layoff-related keywords.
+    Expects candidates to have 'title' and optionally 'summary' or 'description' keys.
+    """
+    keywords = [
+        r"layoff", r"laid off", r"job cut", r"cutting jobs", r"headcount",
+        r"reduction in force", r"rif", r"downsiz", r"restructur",
+        r"furlough", r"severance", r"let go", r"closing", r"shut down"
+    ]
+    
+    # Compile a single regex pattern for efficiency
+    pattern = re.compile(r'\b(?:' + '|'.join(keywords) + r')\b', re.IGNORECASE)
+    
+    filtered_candidates = []
+    
+    for candidate in candidates:
+        title = candidate.get('title', '')
+        summary = candidate.get('summary', '') or candidate.get('description', '')
+        
+        # Combine fields to search the entire available text surface
+        text_to_search = f"{title} {summary}"
+        
+        if pattern.search(text_to_search):
+            filtered_candidates.append(candidate)
+            
+    return filtered_candidates
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
@@ -29,8 +58,12 @@ async def run_pipeline():
     conn = get_db_connection()
     adapter = GoogleNewsAdapter()
     print("Fetching feeds...")
-    items = await adapter.fetch_latest()
-    print(f"Discovered {len(items)} source candidates.")
+    raw_items = await adapter.fetch_latest()
+    print(f"Discovered {len(raw_items)} source candidates.")
+
+    # --- NEW PRE-FILTER STEP ---
+    items = pre_filter_candidates(raw_items)
+    print(f"Pre-filter complete. Kept {len(items)} relevant candidates for processing.")
 
     # 1. Deduplicate & persist sources into DB
     new_items = []
