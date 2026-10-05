@@ -1,0 +1,14 @@
+google_news:
+  queries:
+    - "layoffs"
+    - "laid off"
+    - "workforce reduction"
+    - "job cuts"
+    - "reduction in force"
+  lookback_days: 2
+
+rss_feeds:
+  - name: "TechCrunch Layoffs"
+    url: "https://techcrunch.com/tag/layoffs/feed/"
+  - name: "PR Newswire Business"
+    url: "https://www.prnewswire.com/rss/news-releases-list.rss"
