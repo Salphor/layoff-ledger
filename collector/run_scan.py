@@ -35,21 +35,30 @@ async def run_pipeline():
             source_id = cur.fetchone()["id"]
             conn.commit()
 
-            # Perform Gemini extraction
-            extraction = extract_layoff_facts(item["title"], item["title"])
-            if extraction and extraction.is_layoff:
-                cur.execute(
-                    """
-                    INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
-                    VALUES (%s, %s, %s, %s, 'pending') RETURNING id
-                    """,
-                    (source_id, "layoff", psycopg2.extras.Json(extraction.model_dump()), extraction.confidence)
-                )
-                candidate_id = cur.fetchone()["id"]
-                conn.commit()
+            # Perform Gemini extraction with error handling for the demo
+            try:
+                extraction = extract_layoff_facts(item["title"], item["title"])
+                if extraction and extraction.is_layoff:
+                    cur.execute(
+                        """
+                        INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
+                        VALUES (%s, %s, %s, %s, 'pending') RETURNING id
+                        """,
+                        (source_id, "layoff", psycopg2.extras.Json(extraction.model_dump()), extraction.confidence)
+                    )
+                    candidate_id = cur.fetchone()["id"]
+                    conn.commit()
 
-                # Deduplicate and match
-                process_candidate(candidate_id)
+                    # Deduplicate and match
+                    process_candidate(candidate_id)
+            
+            except Exception as e:
+                # If it still fails after all tenacity retries, log it and continue
+                print(f"Extraction failed for {item['url']} after retries. Error: {e}")
+            
+            # Rate limiting throttle: Wait 13 seconds to stay under the 5 RPM Free Tier limit
+            print("Throttling for 13 seconds to respect Gemini Free Tier quota...")
+            await asyncio.sleep(13)
 
     conn.close()
     print("Scan pipeline complete.")

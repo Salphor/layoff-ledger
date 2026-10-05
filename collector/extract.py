@@ -1,8 +1,9 @@
 import os
+from typing import List, Optional
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 class LayoffExtraction(BaseModel):
     is_layoff: bool = Field(description="True if this text reports an actual or planned workforce reduction.")
@@ -18,6 +19,12 @@ class LayoffExtraction(BaseModel):
     summary: str = Field(description="Objective 2-3 sentence factual summary grounded ONLY in the source text.")
     confidence: float = Field(description="Confidence score between 0.0 and 1.0.")
 
+# Automatically retries on API errors (429/503) with exponential backoff: 4s, 8s, 16s, 32s, 60s
+@retry(
+    wait=wait_exponential(multiplier=2, min=4, max=60),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
 def extract_layoff_facts(title: str, content: str) -> Optional[LayoffExtraction]:
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
@@ -29,17 +36,13 @@ def extract_layoff_facts(title: str, content: str) -> Optional[LayoffExtraction]
     Content: {content}
     """
 
-    try:
-        response = client.models.generate_content(
-            model='gemini-3.8-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=LayoffExtraction,
-                temperature=0.1,
-            ),
-        )
-        return LayoffExtraction.model_validate_json(response.text)
-    except Exception as e:
-        print(f"Gemini Extraction Error: {e}")
-        return None
+    response = client.models.generate_content(
+        model='gemini-3.8-flash',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=LayoffExtraction,
+            temperature=0.1,
+        ),
+    )
+    return LayoffExtraction.model_validate_json(response.text)
