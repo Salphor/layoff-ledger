@@ -1,13 +1,29 @@
 import asyncio
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
+import requests
+from bs4 import BeautifulSoup
 from adapters.google_news_rss import GoogleNewsAdapter
 from extract import extract_layoff_facts
 from match import process_candidate
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
+
+def fetch_and_clean_text(url: str, title: str) -> str:
+    """Attempts to fetch paragraph text from article. Fallback to title if request fails."""
+    try:
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            paragraphs = [p.get_text(strip=True) for p in soup.find_all('p')]
+            body_text = " ".join(paragraphs)[:1500]  # Limit token length per article
+            if body_text.strip():
+                return body_text
+    except Exception:
+        pass
+    return title
 
 async def run_pipeline():
     conn = get_db_connection()
@@ -16,49 +32,98 @@ async def run_pipeline():
     items = await adapter.fetch_latest()
     print(f"Discovered {len(items)} source candidates.")
 
-    for item in items:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Skip existing fingerprints
+    # 1. Deduplicate & persist sources into DB
+    new_items = []
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        for item in items:
             cur.execute("SELECT id FROM sources WHERE fingerprint = %s", (item["fingerprint"],))
             if cur.fetchone():
                 continue
 
-            # Store new source
             cur.execute(
                 """
                 INSERT INTO sources (source_key, publisher, url, title, published_at, fingerprint, metadata)
                 VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
                 """,
-                (item["source_key"], item["publisher"], item["url"], item["title"], 
-                 item["published_at"], item["fingerprint"], psycopg2.extras.Json(item["metadata"]))
+                (
+                    item["source_key"],
+                    item["publisher"],
+                    item["url"],
+                    item["title"], 
+                    item["published_at"],
+                    item["fingerprint"],
+                    Json(item["metadata"])
+                )
             )
             source_id = cur.fetchone()["id"]
             conn.commit()
 
-            # Perform Gemini extraction with error handling for the demo
-            try:
-                extraction = extract_layoff_facts(item["title"], item["title"])
-                if extraction and extraction.is_layoff:
-                    cur.execute(
-                        """
-                        INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
-                        VALUES (%s, %s, %s, %s, 'pending') RETURNING id
-                        """,
-                        (source_id, "layoff", psycopg2.extras.Json(extraction.model_dump()), extraction.confidence)
-                    )
-                    candidate_id = cur.fetchone()["id"]
-                    conn.commit()
+            # Attach DB source_id to item for downstream processing
+            item["source_id"] = source_id
+            new_items.append(item)
 
-                    # Deduplicate and match
-                    process_candidate(candidate_id)
-            
-            except Exception as e:
-                # If it still fails after all tenacity retries, log it and continue
-                print(f"Extraction failed for {item['url']} after retries. Error: {e}")
-            
-            # Rate limiting throttle: Wait 13 seconds to stay under the 5 RPM Free Tier limit
-            print("Throttling for 13 seconds to respect Gemini Free Tier quota...")
-            await asyncio.sleep(13)
+    print(f"Processing {len(new_items)} new un-extracted sources...")
+
+    # Dynamically set batch size based on queue volume
+    if len(new_items) > 100:
+        batch_size = 10  # Backfill mode
+    else:
+        batch_size = 5   # Incremental mode (runs every 4 hrs)
+
+    # 2. Process in chunks to stay within Gemini Free Tier limits
+    for i in range(0, len(new_items), batch_size):
+        batch = new_items[i:i + batch_size]
+        print(f"Processing batch {i // batch_size + 1} of {(len(new_items) + batch_size - 1) // batch_size}...")
+
+        # Construct combined prompt from cleaned content
+        batch_prompt_parts = []
+        for idx, item in enumerate(batch, 1):
+            cleaned_content = fetch_and_clean_text(item["url"], item["title"])
+            batch_prompt_parts.append(
+                f"--- Item [{idx}] ---\nID: {item['source_id']}\nTitle: {item['title']}\nContent: {cleaned_content}\n"
+            )
+        
+        batch_text = "\n".join(batch_prompt_parts)
+
+        try:
+            # Send batch to Gemini model
+            extractions = extract_layoff_facts(batch_text)
+
+            if extractions:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    for extraction in extractions:
+                        # Handle both dictionary and Pydantic model outputs gracefully
+                        is_layoff = extraction.get("is_layoff") if isinstance(extraction, dict) else getattr(extraction, "is_layoff", False)
+                        
+                        if is_layoff:
+                            target_source_id = extraction.get("source_id") if isinstance(extraction, dict) else getattr(extraction, "source_id", None)
+                            confidence = extraction.get("confidence", 0.0) if isinstance(extraction, dict) else getattr(extraction, "confidence", 0.0)
+                            json_data = extraction if isinstance(extraction, dict) else extraction.model_dump()
+
+                            cur.execute(
+                                """
+                                INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
+                                VALUES (%s, %s, %s, %s, 'pending') RETURNING id
+                                """,
+                                (
+                                    target_source_id,
+                                    "layoff",
+                                    Json(json_data),
+                                    confidence
+                                )
+                            )
+                            candidate_id = cur.fetchone()["id"]
+                            conn.commit()
+
+                            # Deduplicate and match downstream
+                            process_candidate(candidate_id)
+
+        except Exception as e:
+            print(f"Batch extraction failed for batch starting at index {i}. Error: {e}")
+
+        # Throttle between batches
+        print("Throttling for 5 seconds between batches...")
+        await asyncio.sleep(5)
 
     conn.close()
     print("Scan pipeline complete.")
