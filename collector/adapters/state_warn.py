@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 class StateWarnAdapter:
-    def __init__(self, states=["ca", "ny", "wa", "tx"]):
+    def __init__(self, states=["ca", "ny", "wa", "tx", "ma", "co", "va", "il", "fl", "nc", "az", "ut", "or"]):
         self.states = states
         self.output_dir = Path("/tmp/warn_data")
 
