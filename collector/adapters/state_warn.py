@@ -21,12 +21,13 @@ class StateWarnAdapter:
 
         for state in self.states:
             try:
-                # Runs warn-scraper via the active Python executable
-                cmd = [sys.executable, "-m", "warn_scraper", "scrape", state, "--data-dir", str(self.output_dir)]
+                # Use module name 'warn' or fallback to binary 'warn-scraper'
+                cmd = [sys.executable, "-m", "warn", "--data-dir", str(self.output_dir), state]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 
                 if result.returncode != 0:
-                    print(f"WARN scraper warning for {state.upper()}: {result.stderr}")
+                    cmd_fallback = ["warn-scraper", "--data-dir", str(self.output_dir), state]
+                    result = subprocess.run(cmd_fallback, capture_output=True, text=True)
 
                 csv_file = self.output_dir / f"{state}.csv"
                 if not csv_file.exists():
