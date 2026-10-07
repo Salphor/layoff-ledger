@@ -38,13 +38,18 @@ def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
 
 def fetch_and_clean_text(url: str, title: str) -> str:
-    """Attempts to fetch paragraph text from article. Fallback to title if request fails."""
+    """Attempts to fetch paragraph text from article with strict timeout. Fallback to title if redirect/failed."""
+    # Google News RSS links redirect heavily and hang standard requests; fallback directly to title
+    if "news.google.com" in url:
+        return title
+
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LayoffRadar/1.0"}
     try:
-        resp = requests.get(url, timeout=5)
+        resp = requests.get(url, headers=headers, timeout=3, allow_redirects=True)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, 'html.parser')
             paragraphs = [p.get_text(strip=True) for p in soup.find_all('p')]
-            body_text = " ".join(paragraphs)[:1500]  # Limit token length per article
+            body_text = " ".join(paragraphs)[:1200]
             if body_text.strip():
                 return body_text
     except Exception:
@@ -55,18 +60,19 @@ async def run_pipeline():
     conn = get_db_connection()
     
     # 1. Fetch fresh data from feeds
+    print("Fetching News feeds...", flush=True)
     news_adapter = GoogleNewsAdapter()
-    print("Fetching News feeds...")
     raw_news_items = await news_adapter.fetch_latest()
     news_items = pre_filter_candidates(raw_news_items)
 
+    print("Fetching State WARN databases...", flush=True)
     warn_adapter = StateWarnAdapter()
-    print("Fetching State WARN databases...")
     warn_items = await warn_adapter.fetch_latest()
 
     all_incoming_items = news_items + warn_items
 
     # 2. Ingest new items into sources table (deduplicated by fingerprint)
+    print("Saving incoming sources to database...", flush=True)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         for item in all_incoming_items:
             cur.execute("SELECT id FROM sources WHERE fingerprint = %s", (item["fingerprint"],))
@@ -88,7 +94,7 @@ async def run_pipeline():
                 )
         conn.commit()
 
-    # 3. Pull ALL unextracted sources directly from DB (Self-Healing / Backfill)
+    # 3. Pull unextracted sources directly from DB (Capped at 30 per run to prevent timeouts)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -96,14 +102,16 @@ async def run_pipeline():
             FROM sources s
             LEFT JOIN candidates c ON s.id = c.source_id
             WHERE c.id IS NULL
+            ORDER BY s.created_at DESC
+            LIMIT 30
             """
         )
         unextracted_sources = cur.fetchall()
 
-    print(f"Discovered {len(unextracted_sources)} total un-extracted sources in database.")
+    print(f"Discovered {len(unextracted_sources)} un-extracted sources for this run batch.", flush=True)
 
     if not unextracted_sources:
-        print("All sources are already processed. Scan pipeline complete.")
+        print("All sources are fully processed! Scan pipeline complete.", flush=True)
         conn.close()
         return
 
@@ -120,7 +128,7 @@ async def run_pipeline():
 
     # 4. Process structured WARN items
     if structured_items:
-        print(f"Processing {len(structured_items)} un-extracted WARN notices...")
+        print(f"Processing {len(structured_items)} structured WARN notices...", flush=True)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             for item in structured_items:
                 meta = item.get("metadata") or {}
@@ -149,13 +157,13 @@ async def run_pipeline():
 
     # 5. Process unstructured News items via Gemini Batching
     if items_for_gemini:
-        print(f"Processing {len(items_for_gemini)} un-extracted news articles via Gemini...")
+        print(f"Processing {len(items_for_gemini)} news articles via Gemini...", flush=True)
         
-        batch_size = 10 if len(items_for_gemini) > 50 else 5
+        batch_size = 5
 
         for i in range(0, len(items_for_gemini), batch_size):
             batch = items_for_gemini[i:i + batch_size]
-            print(f"Processing batch {i // batch_size + 1} of {(len(items_for_gemini) + batch_size - 1) // batch_size}...")
+            print(f"Processing batch {i // batch_size + 1} of {(len(items_for_gemini) + batch_size - 1) // batch_size}...", flush=True)
 
             batch_prompt_parts = []
             for idx, item in enumerate(batch, 1):
@@ -193,13 +201,13 @@ async def run_pipeline():
                                     process_candidate(candidate_id)
 
             except Exception as e:
-                print(f"Batch extraction failed for batch starting at index {i}. Error: {e}")
+                print(f"Batch extraction failed for batch starting at index {i}. Error: {e}", flush=True)
 
-            print("Throttling for 5 seconds between batches...")
-            await asyncio.sleep(5)
+            print("Throttling for 3 seconds between batches...", flush=True)
+            await asyncio.sleep(3)
 
     conn.close()
-    print("Scan pipeline complete.")
+    print("Scan pipeline complete batch successfully.", flush=True)
 
 if __name__ == "__main__":
     asyncio.run(run_pipeline())

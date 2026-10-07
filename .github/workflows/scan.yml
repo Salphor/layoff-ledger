@@ -2,8 +2,9 @@ name: 4-Hour Ingestion Scan
 
 on:
   schedule:
-    - cron: '0 */4 * * *'
-  workflow_dispatch:
+    # Runs every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Allows manual trigger anytime
 
 jobs:
   run-scan:
