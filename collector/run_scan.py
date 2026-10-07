@@ -39,7 +39,6 @@ def get_db_connection():
 
 def fetch_and_clean_text(url: str, title: str) -> str:
     """Attempts to fetch paragraph text from article with strict timeout. Fallback to title if redirect/failed."""
-    # Google News RSS links redirect heavily and hang standard requests; fallback directly to title
     if "news.google.com" in url:
         return title
 
@@ -102,7 +101,7 @@ async def run_pipeline():
             FROM sources s
             LEFT JOIN candidates c ON s.id = c.source_id
             WHERE c.id IS NULL
-            ORDER BY s.created_at DESC
+            ORDER BY s.id DESC
             LIMIT 30
             """
         )
