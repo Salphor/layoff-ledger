@@ -20,11 +20,9 @@ class LayoffExtraction(BaseModel):
     summary: str = Field(description="Objective 2-3 sentence factual summary grounded ONLY in the source text.")
     confidence: float = Field(description="Confidence score between 0.0 and 1.0.")
 
-# Wrapper model to allow Gemini to return a list of extractions in structured JSON
 class BatchExtractionResponse(BaseModel):
     extractions: List[LayoffExtraction] = Field(default_factory=list)
 
-# Automatically retries on API errors (429/503) with exponential backoff: 4s, 8s, 16s, 32s, 60s
 @retry(
     wait=wait_exponential(multiplier=2, min=4, max=60),
     stop=stop_after_attempt(5),
@@ -41,7 +39,7 @@ def extract_layoff_facts(batch_content: str) -> List[LayoffExtraction]:
     """
 
     response = client.models.generate_content(
-        model='gemini-2.5-flash', # Updated to a widely available flash model ID
+        model='gemini-3.8-flash',
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

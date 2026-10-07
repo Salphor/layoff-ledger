@@ -1,35 +1,30 @@
-import subprocess
-import csv
 import os
+import csv
 import hashlib
 from datetime import datetime
+from pathlib import Path
+import warn_scraper
 
 class StateWarnAdapter:
     def __init__(self, states=["ca", "ny", "wa", "tx"]):
         self.states = states
-        # GitHub Actions has a generic /tmp directory we can use for file writes
-        self.output_dir = "/tmp/warn_data"
+        self.output_dir = Path("/tmp/warn_data")
 
     def _generate_fingerprint(self, company, notice_date):
-        """Create a unique hash to prevent duplicate insertions."""
         unique_string = f"WARN-{company}-{notice_date}".lower().encode('utf-8')
         return hashlib.sha256(unique_string).hexdigest()
 
     async def fetch_latest(self):
-        os.makedirs(self.output_dir, exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         structured_candidates = []
 
         for state in self.states:
             try:
-                # FIXED: Invoke via python module so it finds the executable path correctly
-                subprocess.run(
-                    ["python", "-m", "warn_scraper", "scrape", state, "--data-dir", self.output_dir], 
-                    check=True, 
-                    capture_output=True
-                )
+                # Direct Python API call instead of subprocess CLI
+                warn_scraper.scrape(state, self.output_dir)
                 
-                csv_file = os.path.join(self.output_dir, f"{state}.csv")
-                if not os.path.exists(csv_file):
+                csv_file = self.output_dir / f"{state}.csv"
+                if not csv_file.exists():
                     continue
                     
                 with open(csv_file, 'r', encoding='utf-8-sig') as f:
