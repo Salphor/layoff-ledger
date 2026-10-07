@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 class LayoffExtraction(BaseModel):
+    source_id: int = Field(description="The numeric ID corresponding to the Item ID provided in the prompt.")
     is_layoff: bool = Field(description="True if this text reports an actual or planned workforce reduction.")
     company_name: str = Field(description="Canonical corporate name of the employer.")
     announcement_date: Optional[str] = Field(None, description="YYYY-MM-DD date when layoff was announced.")
@@ -19,30 +20,35 @@ class LayoffExtraction(BaseModel):
     summary: str = Field(description="Objective 2-3 sentence factual summary grounded ONLY in the source text.")
     confidence: float = Field(description="Confidence score between 0.0 and 1.0.")
 
+# Wrapper model to allow Gemini to return a list of extractions in structured JSON
+class BatchExtractionResponse(BaseModel):
+    extractions: List[LayoffExtraction] = Field(default_factory=list)
+
 # Automatically retries on API errors (429/503) with exponential backoff: 4s, 8s, 16s, 32s, 60s
 @retry(
     wait=wait_exponential(multiplier=2, min=4, max=60),
     stop=stop_after_attempt(5),
     reraise=True,
 )
-def extract_layoff_facts(title: str, content: str) -> Optional[LayoffExtraction]:
+def extract_layoff_facts(batch_content: str) -> List[LayoffExtraction]:
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     prompt = f"""
-    Analyze the following article title and content regarding potential workforce reductions.
-    Extract factual details strict to the provided text. Do not invent numbers or dates.
+    Analyze the following batch of articles regarding potential workforce reductions.
+    For each item, extract the factual details strict to the provided text. Ensure you map the correct ID to each extraction. Do not invent numbers or dates.
 
-    Title: {title}
-    Content: {content}
+    {batch_content}
     """
 
     response = client.models.generate_content(
-        model='gemini-3.8-flash',
+        model='gemini-2.5-flash', # Updated to a widely available flash model ID
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=LayoffExtraction,
+            response_schema=BatchExtractionResponse,
             temperature=0.1,
         ),
     )
-    return LayoffExtraction.model_validate_json(response.text)
+    
+    result = BatchExtractionResponse.model_validate_json(response.text)
+    return result.extractions
