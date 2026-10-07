@@ -1,9 +1,10 @@
 import os
 import csv
 import hashlib
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
-import warn_scraper
 
 class StateWarnAdapter:
     def __init__(self, states=["ca", "ny", "wa", "tx"]):
@@ -20,9 +21,13 @@ class StateWarnAdapter:
 
         for state in self.states:
             try:
-                # Direct Python API call instead of subprocess CLI
-                warn_scraper.scrape(state, self.output_dir)
+                # Runs warn-scraper via the active Python executable
+                cmd = [sys.executable, "-m", "warn_scraper", "scrape", state, "--data-dir", str(self.output_dir)]
+                result = subprocess.run(cmd, capture_output=True, text=True)
                 
+                if result.returncode != 0:
+                    print(f"WARN scraper warning for {state.upper()}: {result.stderr}")
+
                 csv_file = self.output_dir / f"{state}.csv"
                 if not csv_file.exists():
                     continue
