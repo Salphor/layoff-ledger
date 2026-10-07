@@ -15,19 +15,27 @@ class StateWarnAdapter:
         unique_string = f"WARN-{company}-{notice_date}".lower().encode('utf-8')
         return hashlib.sha256(unique_string).hexdigest()
 
+    def _get_field(self, row, possible_keys, default=None):
+        """Case-insensitive helper to extract fields from varying state CSV headers."""
+        row_lower = {str(k).lower().strip(): v for k, v in row.items() if k}
+        for key in possible_keys:
+            val = row_lower.get(key.lower())
+            if val is not None and str(val).strip():
+                return str(val).strip()
+        return default
+
     async def fetch_latest(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         structured_candidates = []
 
         for state in self.states:
             try:
-                # Use module name 'warn' or fallback to binary 'warn-scraper'
                 cmd = [sys.executable, "-m", "warn", "--data-dir", str(self.output_dir), state]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 
                 if result.returncode != 0:
                     cmd_fallback = ["warn-scraper", "--data-dir", str(self.output_dir), state]
-                    result = subprocess.run(cmd_fallback, capture_output=True, text=True)
+                    subprocess.run(cmd_fallback, capture_output=True, text=True)
 
                 csv_file = self.output_dir / f"{state}.csv"
                 if not csv_file.exists():
@@ -36,9 +44,9 @@ class StateWarnAdapter:
                 with open(csv_file, 'r', encoding='utf-8-sig') as f:
                     reader = csv.DictReader(f)
                     for row in reader:
-                        company = row.get('Company', row.get('company_name', 'Unknown'))
-                        headcount = row.get('Employees', row.get('employees_affected', 0))
-                        notice_date = row.get('Notice Date', row.get('notice_date', datetime.now().strftime('%Y-%m-%d')))
+                        company = self._get_field(row, ['company', 'company_name', 'employer', 'organization', 'business_name'], 'Unknown')
+                        headcount = self._get_field(row, ['employees', 'employees_affected', 'number_of_workers', 'headcount', 'layoff_num'], 0)
+                        notice_date = self._get_field(row, ['notice_date', 'notice_date_formatted', 'date', 'warn_date'], datetime.now().strftime('%Y-%m-%d'))
                         
                         if company == 'Unknown':
                             continue

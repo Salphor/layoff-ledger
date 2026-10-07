@@ -80,32 +80,38 @@ async def run_pipeline():
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         for item in all_items:
             cur.execute("SELECT id FROM sources WHERE fingerprint = %s", (item["fingerprint"],))
-            if cur.fetchone():
-                continue
+            existing_source = cur.fetchone()
 
-            cur.execute(
-                """
-                INSERT INTO sources (source_key, publisher, url, title, published_at, fingerprint, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-                """,
-                (
-                    item["source_key"],
-                    item["publisher"],
-                    item["url"],
-                    item["title"], 
-                    item["published_at"],
-                    item["fingerprint"],
-                    Json(item["metadata"])
+            if existing_source:
+                source_id = existing_source["id"]
+                # Only skip if this source already has a corresponding candidate entry
+                cur.execute("SELECT id FROM candidates WHERE source_id = %s", (source_id,))
+                if cur.fetchone():
+                    continue
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO sources (source_key, publisher, url, title, published_at, fingerprint, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    """,
+                    (
+                        item["source_key"],
+                        item["publisher"],
+                        item["url"],
+                        item["title"], 
+                        item["published_at"],
+                        item["fingerprint"],
+                        Json(item["metadata"])
+                    )
                 )
-            )
-            source_id = cur.fetchone()["id"]
-            conn.commit()
+                source_id = cur.fetchone()["id"]
+                conn.commit()
 
             # Attach DB source_id to item for downstream processing
             item["source_id"] = source_id
             new_items.append(item)
 
-    print(f"Processing {len(new_items)} total new un-extracted sources...")
+    print(f"Processing {len(new_items)} total un-extracted sources...")
 
     # Separate structured WARN data from unstructured news items needing Gemini
     structured_items = [item for item in new_items if item.get("pre_extracted_json")]
@@ -130,78 +136,3 @@ async def run_pipeline():
                         Json(extracted_data),
                         1.0  # 100% confidence for official government filings
                     )
-                )
-                candidate_id = cur.fetchone()["id"]
-                conn.commit()
-
-                # Deduplicate and match downstream
-                process_candidate(candidate_id)
-
-    # --- PROCESS UNSTRUCTURED NEWS DATA (Via Gemini Batching) ---
-    print(f"Processing {len(items_for_gemini)} news sources via Gemini...")
-    
-    # Dynamically set batch size based on queue volume
-    if len(items_for_gemini) > 100:
-        batch_size = 10  # Backfill mode
-    else:
-        batch_size = 5   # Incremental mode
-
-    for i in range(0, len(items_for_gemini), batch_size):
-        batch = items_for_gemini[i:i + batch_size]
-        print(f"Processing batch {i // batch_size + 1} of {(len(items_for_gemini) + batch_size - 1) // batch_size}...")
-
-        # Construct combined prompt from cleaned content
-        batch_prompt_parts = []
-        for idx, item in enumerate(batch, 1):
-            cleaned_content = fetch_and_clean_text(item["url"], item["title"])
-            batch_prompt_parts.append(
-                f"--- Item [{idx}] ---\nID: {item['source_id']}\nTitle: {item['title']}\nContent: {cleaned_content}\n"
-            )
-        
-        batch_text = "\n".join(batch_prompt_parts)
-
-        try:
-            # Send batch to Gemini model
-            extractions = extract_layoff_facts(batch_text)
-
-            if extractions:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    for extraction in extractions:
-                        # Handle both dictionary and Pydantic model outputs gracefully
-                        is_layoff = extraction.get("is_layoff") if isinstance(extraction, dict) else getattr(extraction, "is_layoff", False)
-                        
-                        if is_layoff:
-                            target_source_id = extraction.get("source_id") if isinstance(extraction, dict) else getattr(extraction, "source_id", None)
-                            confidence = extraction.get("confidence", 0.0) if isinstance(extraction, dict) else getattr(extraction, "confidence", 0.0)
-                            json_data = extraction if isinstance(extraction, dict) else extraction.model_dump()
-
-                            cur.execute(
-                                """
-                                INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
-                                VALUES (%s, %s, %s, %s, 'pending') RETURNING id
-                                """,
-                                (
-                                    target_source_id,
-                                    "layoff",
-                                    Json(json_data),
-                                    confidence
-                                )
-                            )
-                            candidate_id = cur.fetchone()["id"]
-                            conn.commit()
-
-                            # Deduplicate and match downstream
-                            process_candidate(candidate_id)
-
-        except Exception as e:
-            print(f"Batch extraction failed for batch starting at index {i}. Error: {e}")
-
-        # Throttle between batches
-        print("Throttling for 5 seconds between batches...")
-        await asyncio.sleep(5)
-
-    conn.close()
-    print("Scan pipeline complete.")
-
-if __name__ == "__main__":
-    asyncio.run(run_pipeline())
