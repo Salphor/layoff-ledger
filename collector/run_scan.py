@@ -66,12 +66,20 @@ async def run_pipeline():
         cur.execute("SELECT fingerprint FROM sources WHERE fingerprint IS NOT NULL")
         existing_fingerprints = {row[0] for row in cur.fetchall()}
 
-        new_to_insert = [item for item in all_incoming_items if item["fingerprint"] not in existing_fingerprints]
+        # Filter out fingerprints already in DB OR duplicated within this scraped batch
+        seen_batch_fingerprints = set()
+        new_to_insert = []
+        for item in all_incoming_items:
+            fp = item["fingerprint"]
+            if fp not in existing_fingerprints and fp not in seen_batch_fingerprints:
+                seen_batch_fingerprints.add(fp)
+                new_to_insert.append(item)
 
         if new_to_insert:
             insert_query = """
                 INSERT INTO sources (source_key, publisher, url, title, published_at, fingerprint, metadata)
                 VALUES %s
+                ON CONFLICT (fingerprint) DO NOTHING
             """
             data_tuples = [
                 (
@@ -138,7 +146,7 @@ async def run_pipeline():
                     summary_text += f" Affects {headcount} workers."
 
                 extracted_data = {
-                    "source_id": item["source_id"],
+                    "source_id": str(item["source_id"]),
                     "company_name": company_name,
                     "headcount": headcount,
                     "date_announced": notice_date,
@@ -152,7 +160,7 @@ async def run_pipeline():
                     INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
                     VALUES (%s, %s, %s, %s, 'pending') RETURNING id
                     """,
-                    (item["source_id"], "layoff", Json(extracted_data), 1.0)
+                    (str(item["source_id"]), "layoff", Json(extracted_data), 1.0)
                 )
                 candidate_id = cur.fetchone()["id"]
                 conn.commit()
@@ -202,16 +210,17 @@ async def run_pipeline():
                                     if len(batch) == 1:
                                         target_source_id = batch[0]["source_id"]
 
-                                if target_source_id and isinstance(target_source_id, str):
+                                if target_source_id:
+                                    target_source_id_str = str(target_source_id)
                                     if isinstance(json_data, dict):
-                                        json_data["source_id"] = target_source_id
+                                        json_data["source_id"] = target_source_id_str
 
                                     cur.execute(
                                         """
                                         INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
                                         VALUES (%s, %s, %s, %s, 'pending') RETURNING id
                                         """,
-                                        (target_source_id, "layoff", Json(json_data), confidence)
+                                        (target_source_id_str, "layoff", Json(json_data), confidence)
                                     )
                                     candidate_id = cur.fetchone()["id"]
                                     conn.commit()
