@@ -172,7 +172,7 @@ async def run_pipeline():
             for idx, item in enumerate(batch, 1):
                 cleaned_content = fetch_and_clean_text(item["url"], item["title"])
                 batch_prompt_parts.append(
-                    f"--- Item [{idx}] ---\nID: {item['source_id']}\nTitle: {item['title']}\nContent: {cleaned_content}\n"
+                    f"--- Article [{idx}] ---\nSource UUID: {item['source_id']}\nTitle: {item['title']}\nContent: {cleaned_content}\n"
                 )
             
             batch_text = "\n".join(batch_prompt_parts)
@@ -190,7 +190,22 @@ async def run_pipeline():
                                 confidence = extraction.get("confidence", 0.0) if isinstance(extraction, dict) else getattr(extraction, "confidence", 0.0)
                                 json_data = extraction if isinstance(extraction, dict) else extraction.model_dump()
 
-                                if target_source_id:
+                                # Fallback: If Gemini returned a 1-based index (e.g., 1 or 2) instead of the full UUID string
+                                if isinstance(target_source_id, int) or (isinstance(target_source_id, str) and target_source_id.isdigit()):
+                                    idx_val = int(target_source_id) - 1
+                                    if 0 <= idx_val < len(batch):
+                                        target_source_id = batch[idx_val]["source_id"]
+
+                                # Single-item or fallback mapping safety check
+                                valid_batch_uuids = [str(b["source_id"]) for b in batch]
+                                if not target_source_id or str(target_source_id) not in valid_batch_uuids:
+                                    if len(batch) == 1:
+                                        target_source_id = batch[0]["source_id"]
+
+                                if target_source_id and isinstance(target_source_id, str):
+                                    if isinstance(json_data, dict):
+                                        json_data["source_id"] = target_source_id
+
                                     cur.execute(
                                         """
                                         INSERT INTO candidates (source_id, classification, extracted_json, confidence, status)
