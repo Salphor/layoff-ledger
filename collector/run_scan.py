@@ -104,7 +104,7 @@ async def run_pipeline():
             FROM sources s
             LEFT JOIN candidates c ON s.id = c.source_id
             WHERE c.id IS NULL
-            ORDER BY s.id DESC
+            ORDER BY s.id ASC
             LIMIT 30
             """
         )
