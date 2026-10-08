@@ -7,9 +7,10 @@ from datetime import datetime
 from pathlib import Path
 
 class StateWarnAdapter:
-    def __init__(self, states=["ca", "ny", "wa", "tx", "ma", "co", "va", "il", "fl", "nc", "az", "ut", "or"]):
+    def __init__(self, states=["ca", "ny", "wa", "tx"], max_days_old=2):
         self.states = states
         self.output_dir = Path("/tmp/warn_data")
+        self.cutoff_date = datetime.now() - timedelta(days=max_days_old)
 
     def _generate_fingerprint(self, company, notice_date):
         unique_string = f"WARN-{company}-{notice_date}".lower().encode('utf-8')

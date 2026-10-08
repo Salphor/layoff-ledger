@@ -65,7 +65,7 @@ async def run_pipeline():
     news_items = pre_filter_candidates(raw_news_items)
 
     print("Fetching State WARN databases...", flush=True)
-    warn_adapter = StateWarnAdapter()
+    warn_adapter = StateWarnAdapter(max_days_old=2)
     warn_items = await warn_adapter.fetch_latest()
 
     all_incoming_items = news_items + warn_items
