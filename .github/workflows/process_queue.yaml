@@ -1,0 +1,38 @@
+name: Event Processing Worker
+
+on:
+  schedule:
+    # Runs once every hour at minute 32 (offset from main scan at :17 and :47)
+    - cron: '32 * * * *'
+  workflow_dispatch: # Allows manual execution whenever needed
+
+concurrency:
+  group: queue-processing-worker
+  cancel-in-progress: false
+
+jobs:
+  process-backlog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r collector/requirements.txt
+
+      - name: Process Backlog Queue
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NODE_OPTIONS: '--no-deprecation'
+        run: |
+          python collector/process_queue.py
