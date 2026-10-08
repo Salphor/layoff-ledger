@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 import psycopg2
-from psycopg2.extras import RealDictCursor, Json
+from psycopg2.extras import RealDictCursor, Json, execute_values
 import requests
 from bs4 import BeautifulSoup
 from adapters.google_news_rss import GoogleNewsAdapter
@@ -11,35 +11,24 @@ from extract import extract_layoff_facts
 from match import process_candidate
 
 def pre_filter_candidates(candidates):
-    """
-    Filters a list of RSS entry dictionaries based on layoff-related keywords.
-    Expects candidates to have 'title' and optionally 'summary' or 'description' keys.
-    """
     keywords = [
         r"layoff", r"laid off", r"job cut", r"cutting jobs", r"headcount",
         r"reduction in force", r"rif", r"downsiz", r"restructur",
         r"furlough", r"severance", r"let go", r"closing", r"shut down"
     ]
-    
     pattern = re.compile(r'\b(?:' + '|'.join(keywords) + r')\b', re.IGNORECASE)
-    filtered_candidates = []
-    
+    filtered = []
     for candidate in candidates:
-        title = candidate.get('title', '')
-        summary = candidate.get('summary', '') or candidate.get('description', '')
-        text_to_search = f"{title} {summary}"
-        
-        if pattern.search(text_to_search):
-            filtered_candidates.append(candidate)
-            
-    return filtered_candidates
+        text = f"{candidate.get('title', '')} {candidate.get('summary', '') or candidate.get('description', '')}"
+        if pattern.search(text):
+            filtered.append(candidate)
+    return filtered
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
 
 def fetch_and_clean_text(url: str, title: str) -> str:
-    """Attempts to fetch paragraph text from article with strict timeout. Fallback to title if redirect/failed."""
-    if "news.google.com" in url:
+    if "news.google.com" in url or ".local" in url:
         return title
 
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LayoffRadar/1.0"}
@@ -69,31 +58,37 @@ async def run_pipeline():
     warn_items = await warn_adapter.fetch_latest()
 
     all_incoming_items = news_items + warn_items
+    print(f"Discovered {len(all_incoming_items)} total scraped items.", flush=True)
 
-    # 2. Ingest new items into sources table (deduplicated by fingerprint)
+    # 2. FAST BULK DEDUPLICATION & INSERTION
     print("Saving incoming sources to database...", flush=True)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        for item in all_incoming_items:
-            cur.execute("SELECT id FROM sources WHERE fingerprint = %s", (item["fingerprint"],))
-            if not cur.fetchone():
-                cur.execute(
-                    """
-                    INSERT INTO sources (source_key, publisher, url, title, published_at, fingerprint, metadata)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        item["source_key"],
-                        item["publisher"],
-                        item["url"],
-                        item["title"], 
-                        item["published_at"],
-                        item["fingerprint"],
-                        Json(item["metadata"])
-                    )
-                )
-        conn.commit()
+    with conn.cursor() as cur:
+        cur.execute("SELECT fingerprint FROM sources WHERE fingerprint IS NOT NULL")
+        existing_fingerprints = {row[0] for row in cur.fetchall()}
 
-    # 3. Pull unextracted sources directly from DB (Capped at 30 per run to prevent timeouts)
+        new_to_insert = [item for item in all_incoming_items if item["fingerprint"] not in existing_fingerprints]
+
+        if new_to_insert:
+            insert_query = """
+                INSERT INTO sources (source_key, publisher, url, title, published_at, fingerprint, metadata)
+                VALUES %s
+            """
+            data_tuples = [
+                (
+                    item["source_key"],
+                    item["publisher"],
+                    item["url"],
+                    item["title"],
+                    item["published_at"],
+                    item["fingerprint"],
+                    Json(item["metadata"])
+                )
+                for item in new_to_insert
+            ]
+            execute_values(cur, insert_query, data_tuples)
+            conn.commit()
+
+    # 3. Pull unextracted sources directly from DB (Capped at 30 per run)
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -132,14 +127,24 @@ async def run_pipeline():
             for item in structured_items:
                 meta = item.get("metadata") or {}
                 raw_row = meta.get("raw_row", {})
+                state = meta.get("state", "US").upper()
                 
+                company_name = raw_row.get("company") or raw_row.get("company_name") or item["title"].replace("WARN Notice: ", "")
+                headcount = int(raw_row.get("employees", 0)) if str(raw_row.get("employees", "")).isdigit() else None
+                notice_date = meta.get("notice_date")
+
+                summary_text = f"Official {state} State WARN Notice filed by {company_name}."
+                if headcount:
+                    summary_text += f" Affects {headcount} workers."
+
                 extracted_data = {
                     "source_id": item["source_id"],
-                    "company_name": raw_row.get("company") or raw_row.get("company_name") or item["title"].replace("WARN Notice: ", ""),
-                    "headcount": int(raw_row.get("employees", 0)) if str(raw_row.get("employees", "")).isdigit() else None,
-                    "date_announced": meta.get("notice_date"),
+                    "company_name": company_name,
+                    "headcount": headcount,
+                    "date_announced": notice_date,
                     "is_layoff": True,
-                    "source_type": "warn_database"
+                    "source_type": "warn_database",
+                    "summary": summary_text
                 }
 
                 cur.execute(
@@ -157,7 +162,6 @@ async def run_pipeline():
     # 5. Process unstructured News items via Gemini Batching
     if items_for_gemini:
         print(f"Processing {len(items_for_gemini)} news articles via Gemini...", flush=True)
-        
         batch_size = 5
 
         for i in range(0, len(items_for_gemini), batch_size):
