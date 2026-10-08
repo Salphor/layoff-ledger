@@ -3,7 +3,7 @@ import csv
 import hashlib
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 class StateWarnAdapter:
@@ -17,13 +17,23 @@ class StateWarnAdapter:
         return hashlib.sha256(unique_string).hexdigest()
 
     def _get_field(self, row, possible_keys, default=None):
-        """Case-insensitive helper to extract fields from varying state CSV headers."""
         row_lower = {str(k).lower().strip(): v for k, v in row.items() if k}
         for key in possible_keys:
             val = row_lower.get(key.lower())
             if val is not None and str(val).strip():
                 return str(val).strip()
         return default
+
+    def _is_recent(self, date_str):
+        if not date_str:
+            return True
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt = datetime.strptime(date_str.split()[0], fmt)
+                return dt >= self.cutoff_date
+            except ValueError:
+                continue
+        return True
 
     async def fetch_latest(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -32,11 +42,11 @@ class StateWarnAdapter:
         for state in self.states:
             try:
                 cmd = [sys.executable, "-m", "warn", "--data-dir", str(self.output_dir), state]
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 
                 if result.returncode != 0:
                     cmd_fallback = ["warn-scraper", "--data-dir", str(self.output_dir), state]
-                    subprocess.run(cmd_fallback, capture_output=True, text=True)
+                    subprocess.run(cmd_fallback, capture_output=True, text=True, timeout=120)
 
                 csv_file = self.output_dir / f"{state}.csv"
                 if not csv_file.exists():
@@ -49,7 +59,7 @@ class StateWarnAdapter:
                         headcount = self._get_field(row, ['employees', 'employees_affected', 'number_of_workers', 'headcount', 'layoff_num'], 0)
                         notice_date = self._get_field(row, ['notice_date', 'notice_date_formatted', 'date', 'warn_date'], datetime.now().strftime('%Y-%m-%d'))
                         
-                        if company == 'Unknown':
+                        if company == 'Unknown' or not self._is_recent(notice_date):
                             continue
                             
                         fingerprint = self._generate_fingerprint(company, notice_date)
@@ -75,6 +85,6 @@ class StateWarnAdapter:
                         })
 
             except Exception as e:
-                print(f"Failed to scrape WARN data for {state.upper()}: {e}")
+                print(f"Failed to scrape WARN data for {state.upper()}: {e}", flush=True)
 
         return structured_candidates
