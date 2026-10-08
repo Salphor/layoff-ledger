@@ -1,6 +1,7 @@
-import os
+import asyncio
 import csv
 import hashlib
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -10,6 +11,7 @@ class StateWarnAdapter:
     def __init__(self, states=["ca", "ny", "wa", "tx"], max_days_old=2):
         self.states = states
         self.output_dir = Path("/tmp/warn_data")
+        self.cache_dir = Path("/tmp/warn_cache")
         self.cutoff_date = datetime.now() - timedelta(days=max_days_old)
 
     def _generate_fingerprint(self, company, notice_date):
@@ -35,18 +37,36 @@ class StateWarnAdapter:
                 continue
         return True
 
+    def _run_state_scrape(self, state):
+        """Synchronous subprocess execution run in a separate thread."""
+        cmd = [
+            sys.executable, "-m", "warn",
+            "--data-dir", str(self.output_dir),
+            "--cache-dir", str(self.cache_dir),
+            state
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                cmd_fallback = [
+                    "warn-scraper",
+                    "--data-dir", str(self.output_dir),
+                    "--cache-dir", str(self.cache_dir),
+                    state
+                ]
+                subprocess.run(cmd_fallback, capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired:
+            print(f"Failed to scrape WARN data for {state.upper()}: Timed out after 300 seconds", flush=True)
+
     async def fetch_latest(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         structured_candidates = []
 
         for state in self.states:
             try:
-                cmd = [sys.executable, "-m", "warn", "--data-dir", str(self.output_dir), state]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                
-                if result.returncode != 0:
-                    cmd_fallback = ["warn-scraper", "--data-dir", str(self.output_dir), state]
-                    subprocess.run(cmd_fallback, capture_output=True, text=True, timeout=120)
+                # Offload the 300s subprocess call so it doesn't block the async event loop
+                await asyncio.to_thread(self._run_state_scrape, state)
 
                 csv_file = self.output_dir / f"{state}.csv"
                 if not csv_file.exists():
