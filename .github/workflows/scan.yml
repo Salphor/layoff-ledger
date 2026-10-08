@@ -1,14 +1,21 @@
-name: 4-Hour Ingestion Scan
+name: 30-Minute Ingestion Scan
 
 on:
   schedule:
-    # Runs every 30 minutes
-    - cron: '*/30 * * * *'
+    # Runs every 30 minutes offset from the top/bottom of the hour (at :17 and :47)
+    - cron: '17,47 * * * *'
   workflow_dispatch: # Allows manual trigger anytime
+
+# Prevent overlapping runs and cancel stuck runs if a new schedule triggers
+concurrency:
+  group: scan-pipeline
+  cancel-in-progress: true
 
 jobs:
   run-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # Prevents jobs from hanging past 15 mins
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -28,5 +35,6 @@ jobs:
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           JINA_READER_API_KEY: ${{ secrets.JINA_READER_API_KEY }}
+          NODE_OPTIONS: '--no-deprecation'
         run: |
           python collector/run_scan.py
