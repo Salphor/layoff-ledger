@@ -37,6 +37,12 @@ class GoogleNewsAdapter:
                         "title": entry.title,
                         "published_at": published_at,
                         "fingerprint": fingerprint,
-                        "metadata": {"search_query": query}
+                        "metadata": {
+                            "company_name": None,
+                            "affected_count": None,
+                            "notice_date": published_at,
+                            "raw_source": "news",
+                            "search_query": query
+                        }
                     })
         return results

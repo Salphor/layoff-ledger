@@ -65,7 +65,6 @@ class StateWarnAdapter:
 
         for state in self.states:
             try:
-                # Offload the 300s subprocess call so it doesn't block the async event loop
                 await asyncio.to_thread(self._run_state_scrape, state)
 
                 csv_file = self.output_dir / f"{state}.csv"
@@ -83,10 +82,11 @@ class StateWarnAdapter:
                             continue
                             
                         fingerprint = self._generate_fingerprint(company, notice_date)
+                        affected_count = int(headcount) if str(headcount).isdigit() else None
                         
                         extracted_json = {
                             "company_name": company,
-                            "headcount": int(headcount) if str(headcount).isdigit() else None,
+                            "headcount": affected_count,
                             "date_announced": notice_date,
                             "is_layoff": True,
                             "source_type": "warn_database",
@@ -100,7 +100,14 @@ class StateWarnAdapter:
                             "title": f"WARN Notice: {company} ({state.upper()})",
                             "published_at": notice_date,
                             "fingerprint": fingerprint,
-                            "metadata": {"state": state, "raw_row": row},
+                            "metadata": {
+                                "company_name": company,
+                                "affected_count": affected_count,
+                                "notice_date": notice_date,
+                                "raw_source": "WARN",
+                                "state": state,
+                                "raw_row": row
+                            },
                             "pre_extracted_json": extracted_json
                         })
 
