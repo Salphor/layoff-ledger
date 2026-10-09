@@ -11,8 +11,8 @@ def get_db_connection():
 
 def extract_and_save_candidate(conn, source):
     """
-    Transforms a raw source record into a candidate record.
-    Supports both pre-parsed structured WARN metadata and news extraction.
+    Transforms a raw source record into a candidate record matching your exact schema:
+    (source_id, company_name, classification, extracted_json, confidence, status)
     """
     metadata = source.get("metadata") or {}
     
@@ -23,22 +23,34 @@ def extract_and_save_candidate(conn, source):
         except Exception:
             metadata = {}
 
-    company_name = metadata.get("company_name") or source.get("title") or "Unknown Company"
-    impacted_count = metadata.get("affected_count") or metadata.get("impacted_count") or None
+    company_name = metadata.get("company_name") or metadata.get("company_raw") or source.get("title") or "Unknown Company"
+    impacted_count = metadata.get("affected_count") or metadata.get("impacted_count") or metadata.get("headcount") or None
     notice_date = metadata.get("notice_date") or metadata.get("date") or None
+
+    # Construct jsonb payload matching your existing extracted_json structure
+    extracted_payload = json.dumps({
+        "summary": f"Official WARN Notice filed by {company_name}",
+        "headcount": impacted_count,
+        "notice_date": notice_date,
+        "is_layoff": True,
+        "source_id": str(source["source_id"]),
+        "raw_metadata": metadata
+    })
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             INSERT INTO candidates (
-                source_id, company_name, impacted_count, notice_date, status, created_at
+                source_id, company_name, classification, extracted_json, confidence, status, created_at
             ) VALUES (
-                %s, %s, %s, %s, 'pending', NOW()
+                %s, %s, 'layoff', %s, 1.000, 'pending', NOW()
             )
-            ON CONFLICT (source_id) DO UPDATE SET updated_at = NOW()
+            ON CONFLICT (source_id) DO UPDATE SET 
+                company_name = EXCLUDED.company_name,
+                extracted_json = EXCLUDED.extracted_json
             RETURNING id;
             """,
-            (source["source_id"], company_name, impacted_count, notice_date)
+            (source["source_id"], company_name, extracted_payload)
         )
         row = cur.fetchone()
         conn.commit()
