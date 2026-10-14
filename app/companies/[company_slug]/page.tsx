@@ -1,9 +1,36 @@
 import { getCompanyBySlug, getCompanyEvents } from '@/lib/api'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { Calendar, ChevronDown, ChevronRight, ExternalLink, Globe, MapPin, Users, type LucideIcon } from 'lucide-react'
-import JobQueCampaignCard from '@/app/components/JobQueCampaignCard'
+import { ChevronDown, ChevronRight, Globe, History, ShieldCheck, FileText } from 'lucide-react'
+import EventArticleView, { isWarnEvent, resolveFacts } from '@/app/components/EventArticleView'
+import JobQueCta from '@/app/components/JobQueCta'
 import { formatDate } from '@/lib/site'
+import type { LayoffEvent } from '@/lib/types'
+
+export const revalidate = 300
+
+export async function generateMetadata({ params }: { params: { company_slug: string } }) {
+  const company = await getCompanyBySlug(params.company_slug)
+  return { title: company ? `${company.canonical_name} Layoffs` : 'Company not found' }
+}
+
+function EventBadge({ event }: { event: LayoffEvent }) {
+  if (isWarnEvent(event)) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-tan/40 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-green">
+        <FileText size={12} /> Official WARN notice
+      </span>
+    )
+  }
+  if (event.status === 'verified' || event.source_count >= 3) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-green/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-green">
+        <ShieldCheck size={12} /> Verified &middot; {event.source_count} sources
+      </span>
+    )
+  }
+  return null
+}
 
 export default async function CompanyPage({
   params,
@@ -15,179 +42,116 @@ export default async function CompanyPage({
   const company = await getCompanyBySlug(params.company_slug)
   if (!company) notFound()
 
+  // Newest first. The first one is the page's current article.
   const events = await getCompanyEvents(company.id)
   if (!events.length) notFound()
 
-  // Find selected event, fallback to newest
-  const activeEvent = searchParams.event
-    ? events.find((e) => e.event_slug === searchParams.event) || events[0]
-    : events[0]
-
-  const isLatest = activeEvent.id === events[0].id
-
-  // Safe URL helper to respect strict brief guidelines
-  const isSafeUrl = (url: string) => {
-    if (!url) return false
-    try {
-      const p = new URL(url)
-      return (p.protocol === 'http:' || p.protocol === 'https:') && !p.hostname.endsWith('.local')
-    } catch {
-      return false
-    }
-  }
-
+  const [latest, ...history] = events
   const initial = company.canonical_name.trim().charAt(0).toUpperCase()
 
   return (
     <>
       {/* Header band */}
-      <section className="relative overflow-hidden bg-brand-navy text-white">
+      <section className="relative overflow-hidden bg-gradient-to-br from-brand-green via-brand-green-dark to-brand-green-dark text-white">
         <div className="bg-grid absolute inset-0" />
         <div className="container-page relative py-12">
-          <nav className="mb-6 flex items-center gap-1.5 text-xs text-white/55" aria-label="Breadcrumb">
+          <nav className="mb-6 flex items-center gap-1.5 text-xs text-white/60" aria-label="Breadcrumb">
             <Link href="/layoffs" className="hover:text-white">Layoffs</Link>
             <ChevronRight size={12} />
-            <span className="truncate text-white/80">{company.canonical_name}</span>
+            <span className="truncate text-white/85">{company.canonical_name}</span>
           </nav>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-brand-green text-2xl font-bold text-brand-gold ring-1 ring-white/10">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white/10 text-2xl font-bold text-brand-gold ring-1 ring-white/20">
               {initial}
             </div>
             <div className="min-w-0">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{company.canonical_name}</h1>
-              {company.website_domain && (
-                <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-brand-gold">
-                  <Globe size={14} /> {company.website_domain}
-                </p>
-              )}
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70">
+                {company.website_domain && (
+                  <span className="inline-flex items-center gap-1.5 text-brand-gold">
+                    <Globe size={14} /> {company.website_domain}
+                  </span>
+                )}
+                <span>
+                  {events.length} layoff event{events.length === 1 ? '' : 's'} tracked
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <div className="container-page max-w-4xl py-10">
-        {/* History selector */}
-        {events.length > 1 && (
-          <div className="mb-5 flex justify-end">
-            <details className="group relative">
-              <summary className="card flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium transition hover:border-brand-green/40">
-                Bulletin history <ChevronDown size={14} className="transition group-open:rotate-180" />
-              </summary>
-              <div className="absolute right-0 top-full z-10 mt-2 w-72 overflow-hidden rounded-xl border border-brand-navy/10 bg-white shadow-lift">
-                {events.map((evt) => (
-                  <Link
-                    href={`/companies/${company.slug}?event=${evt.event_slug}`}
-                    key={evt.id}
-                    className={`flex items-center justify-between px-4 py-3 text-sm hover:bg-[#F6F6F4] ${
-                      evt.id === activeEvent.id ? 'border-l-4 border-brand-gold bg-[#F6F6F4] font-semibold' : 'border-l-4 border-transparent'
-                    }`}
-                  >
-                    {formatDate(evt.date_announced || evt.created_at)}
-                    {evt.id === events[0].id && (
-                      <span className="rounded-full bg-brand-green px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">Latest</span>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            </details>
+        {/* Current (latest) event */}
+        <article className="card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-brand-green px-6 py-3 text-white">
+            <span className="text-sm font-semibold">Latest layoff &middot; {formatDate(resolveFacts(latest).announced || latest.created_at, 'long')}</span>
+            <EventBadge event={latest} />
           </div>
-        )}
-
-        {/* Bulletin */}
-        <article className="card mb-12 overflow-hidden">
-          <div className={`flex items-center justify-between px-6 py-3 text-white ${isLatest ? 'bg-brand-green' : 'bg-brand-navy-light'}`}>
-            <span className="text-sm font-semibold">{isLatest ? 'Latest bulletin' : 'Historical bulletin'}</span>
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/65">Radar event data</span>
-          </div>
-
           <div className="p-6 sm:p-8">
-            <dl className="mb-8 grid grid-cols-2 gap-6 border-b border-brand-navy/10 pb-8 md:grid-cols-4">
-              <Fact icon={Calendar} label="Announced" value={formatDate(activeEvent.date_announced)} />
-              <Fact icon={Calendar} label="Effective" value={formatDate(activeEvent.effective_date)} />
-              <Fact
-                icon={Users}
-                label="Affected"
-                value={activeEvent.employees_affected?.toLocaleString() || activeEvent.employee_count_text || 'Not disclosed'}
-                accent
-              />
-              <Fact
-                icon={MapPin}
-                label="Locations"
-                value={activeEvent.locations?.length ? activeEvent.locations.join(', ') : 'Not disclosed'}
-              />
-            </dl>
-
-            <div className="mb-8">
-              <h2 className="text-lg font-bold">Event summary</h2>
-              <p className="mt-3 text-base leading-relaxed text-brand-navy/80">{activeEvent.summary}</p>
-
-              {activeEvent.reason_provided && (
-                <blockquote className="mt-6 rounded-r-lg border-l-4 border-brand-gold bg-[#F6F6F4] p-4 text-sm leading-relaxed">
-                  <strong className="font-semibold not-italic">The company stated:</strong>{' '}
-                  <span className="italic">&ldquo;{activeEvent.reason_provided}&rdquo;</span>
-                </blockquote>
-              )}
-            </div>
-
-            {/* Sources */}
-            <div className="rounded-xl border border-brand-navy/10 bg-[#F6F6F4] p-5 sm:p-6">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-navy/70">Verified evidence sources</h3>
-              <div className="mt-4 space-y-3">
-                {activeEvent.sources && activeEvent.sources.length > 0 ? (
-                  activeEvent.sources.map((source: any, i: number) => (
-                    <div
-                      key={i}
-                      className="flex flex-col justify-between gap-2 rounded-lg border border-brand-navy/10 bg-white p-4 md:flex-row md:items-center"
-                    >
-                      <div className="min-w-0">
-                        <span className="mr-2 text-sm font-semibold text-brand-green">{source.publisher}</span>
-                        <span className="text-sm text-brand-navy/70">{source.title}</span>
-                      </div>
-                      {isSafeUrl(source.url) ? (
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-brand-green hover:underline"
-                        >
-                          View source <ExternalLink size={14} />
-                        </a>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-brand-tan/30 px-2.5 py-1 text-xs font-medium">Source on file</span>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm italic text-brand-navy/60">Sources currently under review.</p>
-                )}
-              </div>
+            <EventArticleView event={latest} companyName={company.canonical_name} />
+            <div className="mt-8">
+              <JobQueCta />
             </div>
           </div>
         </article>
 
-        <JobQueCampaignCard />
+        {/* History */}
+        <section className="mt-14" aria-labelledby="history-heading">
+          <div className="mb-5 flex items-center gap-3">
+            <History size={20} className="text-brand-green" />
+            <h2 id="history-heading" className="text-xl font-bold tracking-tight">
+              Layoff history
+            </h2>
+            {history.length > 0 && (
+              <span className="rounded-full bg-brand-tan/40 px-2.5 py-0.5 text-xs font-semibold text-brand-green">
+                {history.length} earlier event{history.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+
+          {history.length === 0 ? (
+            <p className="card p-6 text-sm text-brand-navy/65">
+              This is the first layoff event we have recorded for {company.canonical_name}. If another one is found, it
+              will become the main article above and this one will move into this history list.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {history.map((evt) => {
+                const f = resolveFacts(evt)
+                return (
+                  <details
+                    key={evt.id}
+                    id={`event-${evt.id}`}
+                    open={searchParams.event === evt.id}
+                    className="card group overflow-hidden"
+                  >
+                    <summary className="flex cursor-pointer items-center justify-between gap-4 px-5 py-4 transition hover:bg-brand-canvas/60">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-brand-navy">
+                          {evt.article?.headline || `${company.canonical_name}: layoff event reported`}
+                        </p>
+                        <p className="mt-0.5 text-xs text-brand-navy/55">
+                          {formatDate(f.announced || evt.created_at, 'long')} &middot; Employees affected: {f.affected}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="hidden sm:block">
+                          <EventBadge event={evt} />
+                        </span>
+                        <ChevronDown size={18} className="text-brand-navy/40 transition group-open:rotate-180" />
+                      </div>
+                    </summary>
+                    <div className="border-t border-brand-tan/60 p-5 sm:p-7">
+                      <EventArticleView event={evt} companyName={company.canonical_name} />
+                    </div>
+                  </details>
+                )
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </>
-  )
-}
-
-function Fact({
-  icon: Icon,
-  label,
-  value,
-  accent = false,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string
-  accent?: boolean
-}) {
-  return (
-    <div>
-      <dt className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-brand-navy/50">
-        <Icon size={12} /> {label}
-      </dt>
-      <dd className={`text-sm font-semibold ${accent ? 'text-brand-green' : 'text-brand-navy'}`}>{value}</dd>
-    </div>
   )
 }

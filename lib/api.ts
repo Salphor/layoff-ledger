@@ -1,5 +1,6 @@
 import { supabase } from './supabase/client';
-import { LayoffEvent, Company } from './types';
+import { LayoffEvent, Company, Source } from './types';
+import { eventSortTime } from './site';
 
 const PUBLIC_STATUSES = ['published', 'verified'];
 
@@ -44,29 +45,78 @@ export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
 }
 
 export async function getCompanyBySlug(slug: string): Promise<Company | null> {
+  // Try the slug exactly as received and in decoded form, in case either
+  // was percent-encoded on the way in (slugs can contain "(", ")" or "&").
+  let decoded = slug;
+  try { decoded = decodeURIComponent(slug); } catch {}
+  const candidates = Array.from(new Set([slug, decoded]));
+
+  // .limit(1) instead of .single(): .single() errors (and used to 404 the
+  // whole page) if more than one company ever shares a slug.
   const { data, error } = await supabase
     .from('companies')
     .select('*')
-    .eq('slug', slug)
-    .single();
+    .in('slug', candidates)
+    .limit(1);
 
-  if (error) return null;
-  return data;
+  if (error) {
+    console.error('[getCompanyBySlug] query failed for slug', JSON.stringify(slug), error);
+    return null;
+  }
+  if (!data || data.length === 0) {
+    console.error('[getCompanyBySlug] no company found for slug', JSON.stringify(slug));
+    return null;
+  }
+  return data[0] as Company;
 }
 
+// Source links for a set of events, from the public `event_source_links` view
+// (created by db/migrations/002_event_articles.sql).
+async function getSourcesForEvents(eventIds: string[]): Promise<Record<string, Source[]>> {
+  if (eventIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('event_source_links')
+    .select('*')
+    .in('layoff_event_id', eventIds);
+
+  if (error) {
+    console.error(
+      '[getSourcesForEvents] query failed (has db/migrations/002_event_articles.sql been run?)',
+      error
+    );
+    return {};
+  }
+
+  const byEvent: Record<string, Source[]> = {};
+  for (const row of (data || []) as Source[]) {
+    (byEvent[row.layoff_event_id] ||= []).push(row);
+  }
+  return byEvent;
+}
+
+// All public events for a company, newest first, each with its source links.
 export async function getCompanyEvents(companyId: string): Promise<LayoffEvent[]> {
   const { data: events, error } = await supabase
     .from('layoff_events')
     .select('*')
     .eq('company_id', companyId)
-    .in('status', PUBLIC_STATUSES)
-    .order('created_at', { ascending: false });
+    .in('status', PUBLIC_STATUSES);
 
-  if (error || !events || events.length === 0) return [];
+  if (error) {
+    console.error('[getCompanyEvents] query failed for company', companyId, error);
+    return [];
+  }
+  if (!events || events.length === 0) {
+    console.error('[getCompanyEvents] no published events for company', companyId);
+    return [];
+  }
 
-  return events.map(event => ({
+  const sorted = [...events].sort((a, b) => eventSortTime(b) - eventSortTime(a));
+  const sourcesByEvent = await getSourcesForEvents(sorted.map((e) => e.id));
+
+  return sorted.map((event) => ({
     ...event,
-    sources: []
+    sources: sourcesByEvent[event.id] || [],
   })) as LayoffEvent[];
 }
 

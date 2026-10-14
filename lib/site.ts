@@ -16,3 +16,38 @@ export function formatDate(
     timeZone: 'UTC',
   })
 }
+
+// Build a safe URL to a company page. Slugs created by the collector can
+// contain characters like "(", ")" and "&", so percent-encode all of them.
+export function companyHref(company?: { slug?: string | null } | null): string {
+  if (!company?.slug) return '/layoffs'
+  const safe = encodeURIComponent(company.slug).replace(
+    /[!'()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  )
+  return `/companies/${safe}`
+}
+
+// Placeholder promo code shown on company pages until the real one exists.
+export const JOBQUE_COUPON = 'JobqueDiscount'
+
+// Locations/departments/roles are stored as JSON; normalise to string[].
+export function asStringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean)
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean)
+    } catch {}
+  }
+  return []
+}
+
+// The date an event is ordered by everywhere on the site.
+export function eventSortTime(e: {
+  date_announced: string | null
+  notice_date: string | null
+  created_at: string
+}): number {
+  return new Date(e.date_announced || e.notice_date || e.created_at).getTime()
+}

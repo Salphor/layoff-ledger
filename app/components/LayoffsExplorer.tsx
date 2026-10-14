@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { ChevronRight, MapPin, Search, Users, X } from 'lucide-react'
 import type { LayoffEvent } from '@/lib/types'
-import { formatDate } from '@/lib/site'
+import { asStringList, formatDate, companyHref } from '@/lib/site'
 
 const PAGE_SIZE = 25
 
@@ -13,12 +13,26 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
   const [onlyCounts, setOnlyCounts] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
 
+  // `events` arrives newest-first, so the first event we see per company is its
+  // current one. Older events deep-link into that company's history list.
+  const latestIds = useMemo(() => {
+    const seen = new Set<string>()
+    const ids = new Set<string>()
+    for (const e of events) {
+      if (!seen.has(e.company_id)) {
+        seen.add(e.company_id)
+        ids.add(e.id)
+      }
+    }
+    return ids
+  }, [events])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return events.filter((e) => {
       if (onlyCounts && !(e.employees_affected || e.employee_count_text)) return false
       if (!q) return true
-      const hay = [e.company?.canonical_name, e.summary, ...(e.locations || [])].join(' ').toLowerCase()
+      const hay = [e.company?.canonical_name, e.summary, ...asStringList(e.locations)].join(' ').toLowerCase()
       return hay.includes(q)
     })
   }, [events, query, onlyCounts])
@@ -37,7 +51,7 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
             onChange={(e) => { setQuery(e.target.value); setVisible(PAGE_SIZE) }}
             placeholder="Search company, location, or keyword"
             aria-label="Search layoffs"
-            className="w-full rounded-lg border border-brand-navy/10 bg-[#F6F6F4] py-2.5 pl-10 pr-9 text-sm placeholder:text-brand-navy/40 focus:border-brand-green focus:bg-white"
+            className="w-full rounded-lg border border-brand-tan/60 bg-brand-canvas/60 py-2.5 pl-10 pr-9 text-sm placeholder:text-brand-navy/40 focus:border-brand-green focus:bg-white"
           />
           {query && (
             <button
@@ -49,12 +63,12 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
             </button>
           )}
         </div>
-        <label className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-brand-navy/10 px-3 py-2.5 text-sm font-medium text-brand-navy/80 hover:bg-[#F6F6F4]">
+        <label className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-brand-tan/60 px-3 py-2.5 text-sm font-medium text-brand-navy/80 hover:bg-brand-canvas/60">
           <input
             type="checkbox"
             checked={onlyCounts}
             onChange={(e) => { setOnlyCounts(e.target.checked); setVisible(PAGE_SIZE) }}
-            className="h-4 w-4 rounded border-brand-navy/30 accent-brand-green"
+            className="h-4 w-4 rounded border-brand-tan accent-brand-green"
           />
           Disclosed counts only
         </label>
@@ -66,7 +80,7 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        <div className="hidden grid-cols-12 gap-4 border-b border-brand-navy/10 bg-[#F6F6F4] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-brand-navy/55 md:grid">
+        <div className="hidden grid-cols-12 gap-4 border-b border-brand-tan/60 bg-brand-canvas/60 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-brand-navy/55 md:grid">
           <div className="col-span-3">Company</div>
           <div className="col-span-5">Summary</div>
           <div className="col-span-2">Workers</div>
@@ -80,11 +94,11 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
           </div>
         )}
 
-        <ul className="divide-y divide-brand-navy/10">
+        <ul className="divide-y divide-brand-tan/50">
           {shown.map((event) => (
             <li key={event.id}>
               <Link
-                href={`/companies/${event.company?.slug}`}
+                href={latestIds.has(event.id) ? companyHref(event.company) : `${companyHref(event.company)}?event=${event.id}#event-${event.id}`}
                 className="group grid gap-3 px-6 py-5 transition hover:bg-brand-green/[0.04] md:grid-cols-12 md:items-center md:gap-4"
               >
                 <div className="md:col-span-3">
@@ -106,10 +120,10 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
                 </div>
                 <div className="flex items-center justify-between gap-2 md:col-span-2">
                   <span className="flex min-w-0 items-center gap-1.5 text-xs text-brand-navy/65">
-                    {event.locations && event.locations.length > 0 ? (
+                    {asStringList(event.locations).length > 0 ? (
                       <>
                         <MapPin size={12} className="shrink-0" />
-                        <span className="truncate">{event.locations.join(', ')}</span>
+                        <span className="truncate">{asStringList(event.locations).join(', ')}</span>
                       </>
                     ) : (
                       <span className="text-brand-navy/40">—</span>
@@ -127,7 +141,7 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
         <div className="mt-6 text-center">
           <button
             onClick={() => setVisible((v) => v + PAGE_SIZE)}
-            className="rounded-lg border border-brand-navy/15 bg-white px-6 py-2.5 text-sm font-semibold transition hover:border-brand-green hover:text-brand-green"
+            className="rounded-lg border border-brand-tan bg-white px-6 py-2.5 text-sm font-semibold transition hover:border-brand-green hover:text-brand-green"
           >
             Load more
           </button>

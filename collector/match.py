@@ -2,6 +2,89 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
 import json
+import uuid
+from datetime import date, datetime
+
+# ---------------------------------------------------------------------------
+# Event-matching rules
+#
+# A new source is attached to an existing event for the same company only if
+# its date falls close enough to that event's date. How close depends on what
+# kind of event it is:
+#
+#   * Events backed by an official WARN notice keep collecting sources for
+#     ~90 days (the notice period is 60 days, and coverage / amended filings
+#     trail it).
+#   * Events that exist only because of news coverage stay "open" for a short
+#     news cycle. A story about the same company weeks later is almost always
+#     a new event.
+#
+# "Gap" below = (new source's date) - (event's date), in days.
+# ---------------------------------------------------------------------------
+LOOKBACK_DAYS = 14        # a source may be dated slightly BEFORE the event (late / out-of-order arrival)
+WINDOW_WARN_NEWS = 90     # news about an event that has an official WARN notice
+WINDOW_WARN_WARN = 30     # another WARN filing for the same wave (extra sites, amendments)
+WINDOW_NEWS_ONLY = 21     # events with no WARN notice: one news cycle, then it's a new event
+
+CLOSED_STATUSES = ("rejected", "archived")
+
+
+def parse_date(value):
+    """Best-effort date parsing for ISO strings, timestamps and US WARN formats."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    text = text.split("T")[0].split(" ")[0]
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def event_anchor_date(event) -> date:
+    return (
+        parse_date(event.get("date_announced"))
+        or parse_date(event.get("notice_date"))
+        or parse_date(event.get("created_at"))
+        or date.today()
+    )
+
+
+def max_gap_days(event_has_warn: bool, candidate_is_warn: bool) -> int:
+    if event_has_warn:
+        return WINDOW_WARN_WARN if candidate_is_warn else WINDOW_WARN_NEWS
+    return WINDOW_NEWS_ONLY
+
+
+def pick_matching_event(events, candidate_date: date, candidate_is_warn: bool):
+    """Returns the existing event this source belongs to, or None for a new event."""
+    best, best_key = None, None
+    for ev in events:
+        gap = (candidate_date - event_anchor_date(ev)).days
+        if gap < -LOOKBACK_DAYS or gap > max_gap_days(bool(ev.get("has_warn")), candidate_is_warn):
+            continue
+        created = ev.get("created_at")
+        created_ts = created.timestamp() if isinstance(created, datetime) else 0
+        key = (abs(gap), -created_ts)  # closest in time wins; ties go to the newest event
+        if best_key is None or key < best_key:
+            best, best_key = ev, key
+    return best
+
+
+def unique_event_slug(cur, base: str) -> str:
+    cur.execute("SELECT 1 FROM layoff_events WHERE event_slug = %s", (base,))
+    if cur.fetchone():
+        return f"{base}-{uuid.uuid4().hex[:6]}"
+    return base
+
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
@@ -44,24 +127,41 @@ def process_candidate(candidate_id: str):
             headcount = data.get("employees_affected") or data.get("headcount")
             source_id = candidate["source_id"]
 
-            # Match Window: Search up to 90 days backward from announcement/notice date
-            # Handles WARN filings (~60 days prior) matching with subsequent news articles
+            # Is the incoming source an official WARN notice? Look at the source
+            # record itself rather than trusting the payload.
+            cur.execute("SELECT source_key, published_at FROM sources WHERE id = %s", (source_id,))
+            src_row = cur.fetchone() or {}
+            candidate_is_warn = (src_row.get("source_key") or "").startswith("warn-")
+
+            # The date this source is about: its own announcement/notice date,
+            # else when it was published, else today (it was just discovered).
+            candidate_date = (
+                parse_date(date_announced)
+                or parse_date(data.get("notice_date"))
+                or parse_date(src_row.get("published_at"))
+                or date.today()
+            )
+
+            # Candidate events: this company's open events, with a flag for
+            # whether each is backed by an official WARN notice.
             cur.execute(
                 """
-                SELECT id, source_count, status, employees_affected, notice_date, effective_date
-                FROM layoff_events 
-                WHERE company_id = %s 
-                  AND (
-                      (%s::date IS NOT NULL AND notice_date BETWEEN (%s::date - INTERVAL '14 days') AND (%s::date + INTERVAL '90 days'))
-                      OR (%s::date IS NOT NULL AND date_announced BETWEEN (%s::date - INTERVAL '14 days') AND (%s::date + INTERVAL '90 days'))
-                      OR (created_at >= NOW() - INTERVAL '90 days')
-                  )
-                ORDER BY created_at DESC
-                LIMIT 1
+                SELECT e.id, e.source_count, e.status, e.employees_affected, e.notice_date,
+                       e.date_announced, e.effective_date, e.created_at,
+                       EXISTS (
+                           SELECT 1 FROM event_sources es
+                           JOIN sources s ON s.id = es.source_id
+                           WHERE es.layoff_event_id = e.id AND s.source_key LIKE 'warn-%%'
+                       ) AS has_warn
+                FROM layoff_events e
+                WHERE e.company_id = %s
+                  AND e.status NOT IN %s
+                ORDER BY e.created_at DESC
+                LIMIT 50
                 """,
-                (company_id, date_announced, date_announced, date_announced, date_announced, date_announced, date_announced)
+                (company_id, CLOSED_STATUSES),
             )
-            existing_event = cur.fetchone()
+            existing_event = pick_matching_event(cur.fetchall(), candidate_date, candidate_is_warn)
 
             if existing_event:
                 # --- MATCH FOUND: Attach source to existing event ---
@@ -100,7 +200,9 @@ def process_candidate(candidate_id: str):
 
             else:
                 # --- NO MATCH: Create new layoff event ---
-                event_slug = f"{data['company_name'].lower().replace(' ', '-')}-{date_announced or 'recent'}"
+                event_slug = unique_event_slug(
+                    cur, f"{data['company_name'].lower().replace(' ', '-')}-{date_announced or 'recent'}"
+                )
                 initial_status = "published" if candidate["confidence"] >= 0.85 else "review"
 
                 cur.execute(
