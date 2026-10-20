@@ -17,7 +17,6 @@ const config: Config = {
           canvas: '#F1F1F1',
           tan: '#DDC6A4',
           navy: '#142238',
-          'navy-light': '#1E3250',
         },
       },
       fontFamily: {

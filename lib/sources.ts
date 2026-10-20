@@ -15,11 +15,11 @@ const WARN_REGISTRIES: Record<string, { name: string; url: string }> = {
 export interface DisplaySource {
   key: string
   kind: 'warn' | 'news'
-  label: string // publisher / registry name
+  label: string
   title: string | null
   href: string | null
   date: string | null
-  count?: number // number of WARN filings collapsed into this row
+  count?: number
 }
 
 export function isSafeUrl(url: string | null | undefined): url is string {
@@ -40,8 +40,8 @@ function warnState(s: Source): string {
   return (s.warn_state || s.source_key?.replace('warn-', '') || '').toLowerCase()
 }
 
-// Turns raw source rows into clean, clickable entries: official WARN filings
-// are grouped per state (one link to the registry), news sources stay separate.
+// Official WARN filings are grouped per state (one link to the registry);
+// news sources stay separate.
 export function toDisplaySources(sources: Source[] = []): DisplaySource[] {
   const warnByState = new Map<string, DisplaySource>()
   const news: DisplaySource[] = []

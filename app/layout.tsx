@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="flex min-h-screen flex-col font-sans">
-        <header className="sticky top-0 z-40 border-b border-brand-navy/10 bg-white/85 backdrop-blur-md">
+        <header className="sticky top-0 z-40 border-b border-brand-tan/60 bg-white/85 backdrop-blur-md">
           <div className="container-page flex h-16 items-center justify-between">
             <Link href="/" className="flex items-center gap-3">
               <RadarMark />
@@ -27,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="flex items-center gap-1 sm:gap-2">
               <Link
                 href="/layoffs"
-                className="rounded-md px-3 py-2 text-sm font-medium text-brand-navy/80 transition hover:bg-brand-navy/5 hover:text-brand-navy"
+                className="rounded-md px-3 py-2 text-sm font-medium text-brand-navy/80 transition hover:bg-brand-green/5 hover:text-brand-navy"
               >
                 Latest Layoffs
               </Link>
@@ -35,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 href={JOBQUE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-1 rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-green"
+                className="ml-1 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-green-dark"
               >
                 JobQue Services
               </a>
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <main className="flex-1">{children}</main>
 
-        <footer className="bg-brand-navy text-white">
+        <footer className="bg-brand-green-dark text-white">
           <div className="container-page grid gap-10 py-14 md:grid-cols-12">
             <div className="md:col-span-5">
               <div className="flex items-center gap-3">

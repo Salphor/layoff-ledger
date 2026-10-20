@@ -83,9 +83,42 @@ def extract_and_save_candidate(conn, source):
         conn.commit()
         return row["id"] if row else None
 
+def retry_stuck_candidates(conn, limit=50):
+    """
+    Candidates left 'pending' by an earlier crash or timeout would otherwise be
+    stranded: the source query below skips any source that already has a
+    candidate row. Give those another attempt here. The 15-minute grace period
+    keeps us away from candidates another job is processing right now.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT id FROM candidates
+            WHERE status = 'pending' AND created_at < NOW() - INTERVAL '15 minutes'
+            ORDER BY created_at ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        stuck_ids = [row["id"] for row in cur.fetchall()]
+    conn.commit()  # end the read transaction
+
+    if not stuck_ids:
+        return
+    print(f"Retrying {len(stuck_ids)} candidate(s) stranded in 'pending'.", flush=True)
+    for candidate_id in stuck_ids:
+        try:
+            process_candidate(candidate_id)
+        except Exception as e:
+            print(f"Retry failed for candidate {candidate_id}: {e}", flush=True)
+            conn.rollback()
+
+
 def run_queue_processor():
     conn = get_db_connection()
     try:
+        retry_stuck_candidates(conn)
+
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Fetch un-extracted sources from backlog safely targeting table 's'
             cur.execute(

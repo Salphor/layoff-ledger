@@ -3,7 +3,7 @@ import { JOBQUE_URL } from '@/lib/site'
 
 export default function JobQueCampaignCard() {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-brand-navy px-6 py-12 text-white shadow-lift sm:px-12">
+    <div className="relative overflow-hidden rounded-2xl bg-brand-green-dark px-6 py-12 text-white shadow-lift sm:px-12">
       <div className="bg-grid absolute inset-0" />
       <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-gold/10 blur-3xl" />
       <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">

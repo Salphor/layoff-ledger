@@ -1,5 +1,10 @@
 export const JOBQUE_URL = 'https://jobque.ai'
 
+// Placeholder promo details shown on company pages until the real ones exist.
+// Edit these two values and every company page updates.
+export const JOBQUE_COUPON = 'placeholder'
+export const JOBQUE_DISCOUNT = 'placeholder' // shown as "<value>% discount"
+
 // Date-only strings (e.g. "2026-10-09") are parsed as UTC; format in UTC so
 // the displayed day never shifts by timezone.
 export function formatDate(
@@ -28,9 +33,6 @@ export function companyHref(company?: { slug?: string | null } | null): string {
   return `/companies/${safe}`
 }
 
-// Placeholder promo code shown on company pages until the real one exists.
-export const JOBQUE_COUPON = 'JobqueDiscount'
-
 // Locations/departments/roles are stored as JSON; normalise to string[].
 export function asStringList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean)
@@ -46,8 +48,9 @@ export function asStringList(value: unknown): string[] {
 // The date an event is ordered by everywhere on the site.
 export function eventSortTime(e: {
   date_announced: string | null
+  announcement_date?: string | null
   notice_date: string | null
   created_at: string
 }): number {
-  return new Date(e.date_announced || e.notice_date || e.created_at).getTime()
+  return new Date(e.date_announced || e.announcement_date || e.notice_date || e.created_at).getTime()
 }

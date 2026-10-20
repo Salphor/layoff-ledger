@@ -5,26 +5,6 @@ export interface Company {
   website_domain: string | null;
 }
 
-export interface EventArticle {
-  version: number;
-  headline: string;
-  summary: string;
-  key_points: string[];
-  facts: {
-    employees_affected: number | null;
-    employee_count_text: string | null;
-    announced_date: string | null;
-    effective_date: string | null;
-    locations: string[];
-    departments: string[];
-    roles: string[];
-    reason_provided: string | null;
-  };
-  is_warn_notice: boolean;
-  has_news_coverage: boolean;
-  sources_reviewed: number;
-}
-
 // One row of the public `event_source_links` view.
 export interface Source {
   layoff_event_id: string;
@@ -42,6 +22,7 @@ export interface LayoffEvent {
   company_id: string;
   event_slug: string;
   date_announced: string | null;
+  announcement_date?: string | null; // alternate column name in some databases
   notice_date: string | null;
   effective_date: string | null;
   employees_affected: number | null;
@@ -55,8 +36,6 @@ export interface LayoffEvent {
   confidence: number;
   source_count: number;
   created_at: string;
-  article?: EventArticle | null;
-  article_generated_at?: string | null;
   company?: Company; // Joined data
   sources?: Source[]; // Joined data
 }

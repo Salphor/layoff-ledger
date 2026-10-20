@@ -6,10 +6,9 @@ const PUBLIC_STATUSES = ['published', 'verified'];
 
 export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
   // Rank events by the date the layoff was announced, NOT by when our pipeline
-  // happened to process them. (Sorting by created_at would let a backfill of
-  // old notices push genuinely recent layoffs out of the list.)
-  // Two queries because events without an announcement date fall back to
-  // created_at; merging the two top-N lists gives the exact overall top N.
+  // happened to process them. Two queries because events without an
+  // announcement date fall back to created_at; merging the two top-N lists
+  // gives the exact overall top N.
   const [dated, undated] = await Promise.all([
     supabase
       .from('layoff_events')
@@ -37,7 +36,7 @@ export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
 
   const companyIds = Array.from(new Set(events.map(e => e.company_id).filter(Boolean)));
   let companiesMap: Record<string, Company> = {};
-  
+
   if (companyIds.length > 0) {
     const { data: companies } = await supabase
       .from('companies')
@@ -52,27 +51,19 @@ export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
     }
   }
 
-  const fullEvents = events.map(e => ({
+  return events.map(e => ({
     ...e,
     company: companiesMap[e.company_id] || null
   })) as LayoffEvent[];
-
-  return fullEvents.sort((a, b) => {
-    const dateA = new Date(a.date_announced || a.notice_date || a.created_at).getTime();
-    const dateB = new Date(b.date_announced || b.notice_date || b.created_at).getTime();
-    return dateB - dateA;
-  });
 }
 
 export async function getCompanyBySlug(slug: string): Promise<Company | null> {
-  // Try the slug exactly as received and in decoded form, in case either
-  // was percent-encoded on the way in (slugs can contain "(", ")" or "&").
+  // Try the slug as received and in decoded form (slugs can contain "(", ")" or "&").
   let decoded = slug;
   try { decoded = decodeURIComponent(slug); } catch {}
   const candidates = Array.from(new Set([slug, decoded]));
 
-  // .limit(1) instead of .single(): .single() errors (and used to 404 the
-  // whole page) if more than one company ever shares a slug.
+  // .limit(1) instead of .single(): .single() errors if two companies ever share a slug.
   const { data, error } = await supabase
     .from('companies')
     .select('*')
@@ -100,10 +91,7 @@ async function getSourcesForEvents(eventIds: string[]): Promise<Record<string, S
     .in('layoff_event_id', eventIds);
 
   if (error) {
-    console.error(
-      '[getSourcesForEvents] query failed (has db/migrations/002_event_articles.sql been run?)',
-      error
-    );
+    console.error('[getSourcesForEvents] query failed', error);
     return {};
   }
 

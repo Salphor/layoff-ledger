@@ -1,24 +1,20 @@
 import { ArrowRight } from 'lucide-react'
-import { JOBQUE_COUPON, JOBQUE_URL } from '@/lib/site'
+import { JOBQUE_COUPON, JOBQUE_DISCOUNT, JOBQUE_URL } from '@/lib/site'
 import CouponCode from './CouponCode'
 
 export default function JobQueCta() {
   return (
     <div className="relative overflow-hidden rounded-xl bg-brand-green-dark p-6 text-white sm:p-8">
       <div className="bg-grid absolute inset-0 opacity-60" />
-      <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-xl">
-          <p className="text-lg font-bold leading-snug sm:text-xl">Were you affected by this layoff?</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-white/75 sm:text-base">
-            Use JobQue to assist with your next job hunt &ndash; use code at checkout:
-          </p>
-        </div>
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          <CouponCode code={JOBQUE_COUPON} />
-          <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary whitespace-nowrap">
-            Go to JobQue <ArrowRight size={16} />
-          </a>
-        </div>
+      <div className="relative">
+        <p className="text-lg font-bold leading-snug sm:text-xl">Were you affected by this layoff?</p>
+        <p className="mt-2 max-w-2xl text-sm leading-[2.4] text-white/80 sm:text-base sm:leading-[2.4]">
+          Check out JobQue to help with your next job hunt, use code <CouponCode code={JOBQUE_COUPON} /> for a{' '}
+          <strong className="font-semibold text-brand-gold">{JOBQUE_DISCOUNT}%</strong> discount.
+        </p>
+        <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5">
+          Go to JobQue <ArrowRight size={16} />
+        </a>
       </div>
     </div>
   )

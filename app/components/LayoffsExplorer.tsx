@@ -13,20 +13,6 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
   const [onlyCounts, setOnlyCounts] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
 
-  // `events` arrives newest-first, so the first event we see per company is its
-  // current one. Older events deep-link into that company's history list.
-  const latestIds = useMemo(() => {
-    const seen = new Set<string>()
-    const ids = new Set<string>()
-    for (const e of events) {
-      if (!seen.has(e.company_id)) {
-        seen.add(e.company_id)
-        ids.add(e.id)
-      }
-    }
-    return ids
-  }, [events])
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return events.filter((e) => {
@@ -41,7 +27,6 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
 
   return (
     <div>
-      {/* Toolbar */}
       <div className="card mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-navy/40" />
@@ -78,7 +63,6 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
         Showing {shown.length.toLocaleString()} of {filtered.length.toLocaleString()} records
       </p>
 
-      {/* Table */}
       <div className="card overflow-hidden">
         <div className="hidden grid-cols-12 gap-4 border-b border-brand-tan/60 bg-brand-canvas/60 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-brand-navy/55 md:grid">
           <div className="col-span-3">Company</div>
@@ -98,14 +82,16 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
           {shown.map((event) => (
             <li key={event.id}>
               <Link
-                href={latestIds.has(event.id) ? companyHref(event.company) : `${companyHref(event.company)}?event=${event.id}#event-${event.id}`}
+                href={companyHref(event.company)}
                 className="group grid gap-3 px-6 py-5 transition hover:bg-brand-green/[0.04] md:grid-cols-12 md:items-center md:gap-4"
               >
                 <div className="md:col-span-3">
                   <p className="font-semibold leading-snug text-brand-navy group-hover:text-brand-green">
                     {event.company?.canonical_name}
                   </p>
-                  <p className="mt-0.5 text-xs text-brand-navy/50">{formatDate(event.date_announced || event.created_at)}</p>
+                  <p className="mt-0.5 text-xs text-brand-navy/50">
+                    {formatDate(event.date_announced || event.announcement_date || event.created_at)}
+                  </p>
                 </div>
                 <p className="line-clamp-2 text-sm leading-relaxed text-brand-navy/75 md:col-span-5">{event.summary}</p>
                 <div className="md:col-span-2">

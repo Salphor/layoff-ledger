@@ -9,7 +9,7 @@ export default async function LatestLayoffsPage() {
 
   return (
     <>
-      <section className="relative overflow-hidden bg-brand-navy text-white">
+      <section className="relative overflow-hidden bg-brand-green-dark text-white">
         <div className="bg-grid absolute inset-0" />
         <div className="container-page relative py-14">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">Event database</p>
