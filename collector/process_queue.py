@@ -9,33 +9,56 @@ BATCH_SIZE = 50
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
 
-def extract_and_save_candidate(conn, source):
+def build_warn_payload(source):
     """
-    Transforms a raw source record into a candidate record matching your exact schema:
-    (source_id, company_name, classification, extracted_json, confidence, status)
+    Builds the extracted_json for an official WARN notice. This mirrors the
+    structured-WARN branch of run_scan.py so both paths produce identical
+    candidates (same company naming, same field names).
+
+    IMPORTANT: match.py rejects any candidate whose JSON has no top-level
+    "company_name", so it must be included here.
     """
     metadata = source.get("metadata") or {}
-    
-    # Handle WARN notice structured data if present
     if isinstance(metadata, str):
         try:
             metadata = json.loads(metadata)
         except Exception:
             metadata = {}
 
-    company_name = metadata.get("company_name") or metadata.get("company_raw") or source.get("title") or "Unknown Company"
-    impacted_count = metadata.get("affected_count") or metadata.get("impacted_count") or metadata.get("headcount") or None
+    raw_row = metadata.get("raw_row") or {}
+    state = str(metadata.get("state") or "US").upper()
+    company_name = (
+        raw_row.get("company")
+        or raw_row.get("company_name")
+        or (source.get("title") or "").replace("WARN Notice: ", "")
+        or "Unknown Company"
+    )
+
+    employees = raw_row.get("employees", 0)
+    headcount = int(employees) if str(employees).isdigit() else None
+    if not headcount:
+        headcount = metadata.get("affected_count") or None
+
     notice_date = metadata.get("notice_date") or metadata.get("date") or None
 
-    # Construct jsonb payload matching your existing extracted_json structure
-    extracted_payload = json.dumps({
-        "summary": f"Official WARN Notice filed by {company_name}",
-        "headcount": impacted_count,
-        "notice_date": notice_date,
-        "is_layoff": True,
+    summary = f"Official {state} State WARN Notice filed by {company_name}."
+    if headcount:
+        summary += f" Affects {headcount} workers."
+
+    return {
         "source_id": str(source["source_id"]),
-        "raw_metadata": metadata
-    })
+        "company_name": company_name,
+        "headcount": headcount,
+        "date_announced": notice_date,
+        "is_layoff": True,
+        "source_type": "warn_database",
+        "summary": summary,
+    }
+
+
+def extract_and_save_candidate(conn, source):
+    """Creates a pending candidate for an official WARN notice source."""
+    payload = build_warn_payload(source)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -45,12 +68,12 @@ def extract_and_save_candidate(conn, source):
             ) VALUES (
                 %s, %s, 'layoff', %s, 1.000, 'pending', NOW()
             )
-            ON CONFLICT (source_id) DO UPDATE SET 
+            ON CONFLICT (source_id) DO UPDATE SET
                 company_name = EXCLUDED.company_name,
                 extracted_json = EXCLUDED.extracted_json
             RETURNING id;
             """,
-            (source["source_id"], company_name, extracted_payload)
+            (source["source_id"], payload["company_name"], json.dumps(payload)),
         )
         row = cur.fetchone()
         conn.commit()
@@ -67,6 +90,7 @@ def run_queue_processor():
                 FROM sources s
                 LEFT JOIN candidates c ON s.id = c.source_id
                 WHERE c.id IS NULL
+                  AND s.source_key LIKE 'warn-%%'   -- news articles are extracted by run_scan.py, never here
                 ORDER BY s.id DESC
                 LIMIT %s
                 FOR UPDATE OF s SKIP LOCKED
@@ -79,7 +103,7 @@ def run_queue_processor():
             print("Queue is empty. All sources are fully processed and categorized!", flush=True)
             return
 
-        print(f"Queue Processor: Found {len(sources)} sources to extract & categorize.", flush=True)
+        print(f"Queue Processor: Found {len(sources)} official WARN sources to categorize.", flush=True)
 
         processed_count = 0
         for src in sources:
