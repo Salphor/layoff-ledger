@@ -1,10 +1,14 @@
 import os
 import json
+import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from match import process_candidate
 
-BATCH_SIZE = 50
+# WARN notices need no Gemini calls, so large batches are cheap. Override with the
+# QUEUE_BATCH_SIZE environment variable if needed.
+BATCH_SIZE = int(os.environ.get("QUEUE_BATCH_SIZE") or 300)
+TIME_BUDGET_SECONDS = 12 * 60  # stop before the 15-minute workflow timeout
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
@@ -106,7 +110,11 @@ def run_queue_processor():
         print(f"Queue Processor: Found {len(sources)} official WARN sources to categorize.", flush=True)
 
         processed_count = 0
+        started = time.time()
         for src in sources:
+            if time.time() - started > TIME_BUDGET_SECONDS:
+                print("Time budget reached; the rest will be picked up next run.", flush=True)
+                break
             try:
                 # 1 & 2. Create candidate entry from source data
                 candidate_id = extract_and_save_candidate(conn, src)

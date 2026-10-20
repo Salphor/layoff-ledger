@@ -5,15 +5,35 @@ import { eventSortTime } from './site';
 const PUBLIC_STATUSES = ['published', 'verified'];
 
 export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
-  const { data: events, error } = await supabase
-    .from('layoff_events')
-    .select('*')
-    .in('status', PUBLIC_STATUSES)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  // Rank events by the date the layoff was announced, NOT by when our pipeline
+  // happened to process them. (Sorting by created_at would let a backfill of
+  // old notices push genuinely recent layoffs out of the list.)
+  // Two queries because events without an announcement date fall back to
+  // created_at; merging the two top-N lists gives the exact overall top N.
+  const [dated, undated] = await Promise.all([
+    supabase
+      .from('layoff_events')
+      .select('*')
+      .in('status', PUBLIC_STATUSES)
+      .not('date_announced', 'is', null)
+      .order('date_announced', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('layoff_events')
+      .select('*')
+      .in('status', PUBLIC_STATUSES)
+      .is('date_announced', null)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  ]);
 
-  if (error) throw error;
-  if (!events || events.length === 0) return [];
+  if (dated.error) throw dated.error;
+  if (undated.error) throw undated.error;
+
+  const events = [...(dated.data || []), ...(undated.data || [])]
+    .sort((x, y) => eventSortTime(y) - eventSortTime(x))
+    .slice(0, limit);
+  if (events.length === 0) return [];
 
   const companyIds = Array.from(new Set(events.map(e => e.company_id).filter(Boolean)));
   let companiesMap: Record<string, Company> = {};
