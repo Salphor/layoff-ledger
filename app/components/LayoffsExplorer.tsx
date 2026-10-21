@@ -83,11 +83,13 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
             <li key={event.id}>
               <Link
                 href={companyHref(event.company)}
+                aria-disabled={!event.company}
+                onClick={(e) => { if (!event.company) e.preventDefault() }}
                 className="group grid gap-3 px-6 py-5 transition hover:bg-brand-green/[0.04] md:grid-cols-12 md:items-center md:gap-4"
               >
                 <div className="md:col-span-3">
                   <p className="font-semibold leading-snug text-brand-navy group-hover:text-brand-green">
-                    {event.company?.canonical_name}
+                    {event.company?.canonical_name || 'Company unavailable'}
                   </p>
                   <p className="mt-0.5 text-xs text-brand-navy/50">
                     {formatDate(event.date_announced || event.announcement_date || event.created_at)}

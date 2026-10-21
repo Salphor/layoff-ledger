@@ -4,6 +4,24 @@ import { eventSortTime } from './site';
 
 const PUBLIC_STATUSES = ['published', 'verified'];
 
+// Company IDs are sent in the request URL, so a few hundred UUIDs in one
+// request makes the URL too long and the request fails. Fetch in small chunks.
+const ID_CHUNK = 100;
+
+async function getCompaniesByIds(ids: string[]): Promise<Record<string, Company>> {
+  const map: Record<string, Company> = {};
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const chunk = ids.slice(i, i + ID_CHUNK);
+    const { data, error } = await supabase.from('companies').select('*').in('id', chunk);
+    if (error) {
+      console.error('[getCompaniesByIds] query failed for chunk starting at', i, error);
+      continue;
+    }
+    for (const c of (data || []) as Company[]) map[c.id] = c;
+  }
+  return map;
+}
+
 export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
   // Rank events by the date the layoff was announced, NOT by when our pipeline
   // happened to process them. Two queries because events without an
@@ -35,21 +53,7 @@ export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
   if (events.length === 0) return [];
 
   const companyIds = Array.from(new Set(events.map(e => e.company_id).filter(Boolean)));
-  let companiesMap: Record<string, Company> = {};
-
-  if (companyIds.length > 0) {
-    const { data: companies } = await supabase
-      .from('companies')
-      .select('*')
-      .in('id', companyIds);
-
-    if (companies) {
-      companiesMap = companies.reduce((acc, c) => {
-        acc[c.id] = c;
-        return acc;
-      }, {} as Record<string, Company>);
-    }
-  }
+  const companiesMap = await getCompaniesByIds(companyIds);
 
   return events.map(e => ({
     ...e,
@@ -85,19 +89,20 @@ export async function getCompanyBySlug(slug: string): Promise<Company | null> {
 // (created by db/migrations/002_event_articles.sql).
 async function getSourcesForEvents(eventIds: string[]): Promise<Record<string, Source[]>> {
   if (eventIds.length === 0) return {};
-  const { data, error } = await supabase
-    .from('event_source_links')
-    .select('*')
-    .in('layoff_event_id', eventIds);
-
-  if (error) {
-    console.error('[getSourcesForEvents] query failed', error);
-    return {};
-  }
-
   const byEvent: Record<string, Source[]> = {};
-  for (const row of (data || []) as Source[]) {
-    (byEvent[row.layoff_event_id] ||= []).push(row);
+  for (let i = 0; i < eventIds.length; i += ID_CHUNK) {
+    const { data, error } = await supabase
+      .from('event_source_links')
+      .select('*')
+      .in('layoff_event_id', eventIds.slice(i, i + ID_CHUNK));
+
+    if (error) {
+      console.error('[getSourcesForEvents] query failed', error);
+      continue;
+    }
+    for (const row of (data || []) as Source[]) {
+      (byEvent[row.layoff_event_id] ||= []).push(row);
+    }
   }
   return byEvent;
 }
