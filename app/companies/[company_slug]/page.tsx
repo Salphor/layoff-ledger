@@ -8,8 +8,14 @@ import { formatDate } from '@/lib/site'
 
 export const revalidate = 300
 
-export async function generateMetadata({ params }: { params: { company_slug: string } }) {
-  const company = await getCompanyBySlug(params.company_slug)
+// Next.js 15+ passes params/searchParams as Promises. Awaiting them also works
+// on Next.js 14, where they are plain objects.
+type Params = Promise<{ company_slug: string }>
+type SearchParams = Promise<{ event?: string }>
+
+export async function generateMetadata({ params }: { params: Params }) {
+  const { company_slug } = await params
+  const company = await getCompanyBySlug(company_slug)
   return { title: company ? `${company.canonical_name} Layoffs` : 'Company not found' }
 }
 
@@ -17,10 +23,12 @@ export default async function CompanyPage({
   params,
   searchParams,
 }: {
-  params: { company_slug: string }
-  searchParams: { event?: string }
+  params: Params
+  searchParams: SearchParams
 }) {
-  const company = await getCompanyBySlug(params.company_slug)
+  const { company_slug } = await params
+  const { event: openEventId } = await searchParams
+  const company = await getCompanyBySlug(company_slug)
   if (!company) notFound()
 
   // Newest first. The first is the "most recent" event; the next three are the history.
@@ -70,7 +78,7 @@ export default async function CompanyPage({
                 <details
                   key={evt.id}
                   id={`event-${evt.id}`}
-                  open={searchParams.event === evt.id}
+                  open={openEventId === evt.id}
                   className="card group overflow-hidden"
                 >
                   <summary className="flex cursor-pointer items-center justify-between gap-4 px-5 py-4 transition hover:bg-brand-canvas/60">

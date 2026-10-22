@@ -1,4 +1,5 @@
 import './globals.css'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Inter } from 'next/font/google'
 import RadarMark from '@/app/components/RadarMark'
@@ -11,7 +12,7 @@ export const metadata = {
   description: 'Source-first layoff tracking and labor-market intelligence.',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="flex min-h-screen flex-col font-sans">
