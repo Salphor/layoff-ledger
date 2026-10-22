@@ -3,13 +3,14 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Inter } from 'next/font/google'
 import RadarMark from '@/app/components/RadarMark'
-import { JOBQUE_URL } from '@/lib/site'
+import { JOBQUE_URL, SITE_NAME, SITE_TAGLINE } from '@/lib/site'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata = {
-  title: { default: 'Layoff Radar by JobQue', template: '%s | Layoff Radar' },
-  description: 'Source-first layoff tracking and labor-market intelligence.',
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  description: SITE_TAGLINE,
+  applicationName: SITE_NAME,
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -20,10 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <div className="container-page flex h-16 items-center justify-between">
             <Link href="/" className="flex items-center gap-3">
               <RadarMark />
-              <span className="text-lg font-bold tracking-tight text-brand-navy">
-                Layoff Radar
-                <span className="ml-2 hidden text-xs font-medium text-brand-navy/50 sm:inline">by JobQue</span>
-              </span>
+              <span className="text-lg font-bold tracking-tight text-brand-navy">{SITE_NAME}</span>
             </Link>
             <nav className="flex items-center gap-1 sm:gap-2">
               <Link
@@ -51,7 +49,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="md:col-span-5">
               <div className="flex items-center gap-3">
                 <RadarMark className="h-9 w-9" />
-                <p className="text-lg font-bold">Layoff Radar</p>
+                <p className="text-lg font-bold">{SITE_NAME}</p>
               </div>
               <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/60">
                 Aggregating canonical public layoff events directly from WARN notices, state filings, and public newsrooms.
@@ -67,13 +65,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="md:col-span-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">Data notice</p>
               <p className="mt-4 text-sm leading-relaxed text-white/60">
-                Radar data is based on available public reporting. Not all U.S. layoffs are subject to public notices.
+                Our data is based on available public reporting. Not all U.S. layoffs are subject to public notices.
               </p>
             </div>
           </div>
           <div className="border-t border-white/10">
             <div className="container-page flex flex-col gap-2 py-6 text-xs text-white/40 sm:flex-row sm:justify-between">
-              <p>&copy; {new Date().getFullYear()} JobQue. All rights reserved.</p>
+              <p>&copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.</p>
               <p>Source-first. Evidence-linked.</p>
             </div>
           </div>

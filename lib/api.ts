@@ -133,7 +133,7 @@ export async function getCompanyEvents(companyId: string): Promise<LayoffEvent[]
   })) as LayoffEvent[];
 }
 
-export async function getRadarStats() {
+export async function getSiteStats() {
   const { count: eventsCount } = await supabase
     .from('layoff_events')
     .select('*', { count: 'exact', head: true })

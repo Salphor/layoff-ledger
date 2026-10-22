@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, Radar } from 'lucide-react'
+import { SITE_NAME } from '@/lib/site'
 
 export const metadata = { title: 'Page not found' }
 
@@ -8,9 +9,9 @@ export default function NotFound() {
     <section className="relative overflow-hidden bg-gradient-to-br from-brand-green via-brand-green-dark to-brand-green-dark text-white">
       <div className="bg-grid absolute inset-0" />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="animate-radar h-[360px] w-[360px] rounded-full border border-brand-gold/30" />
+        <div className="animate-ring h-[360px] w-[360px] rounded-full border border-brand-gold/30" />
         <div
-          className="animate-radar absolute h-[360px] w-[360px] rounded-full border border-brand-gold/30"
+          className="animate-ring absolute h-[360px] w-[360px] rounded-full border border-brand-gold/30"
           style={{ animationDelay: '2.5s' }}
         />
       </div>
@@ -25,7 +26,7 @@ export default function NotFound() {
           The page you&rsquo;re looking for doesn&rsquo;t exist or may have moved.
         </p>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-white/60">
-          Layoff Radar is constantly tracking new layoff events and adding new company pages. If you&rsquo;re looking
+          {SITE_NAME} is constantly tracking new layoff events and adding new company pages. If you&rsquo;re looking
           for a specific company, it may not have a recorded event yet. Check back soon.
         </p>
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">

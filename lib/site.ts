@@ -1,3 +1,7 @@
+// Site identity. Change the name here and it updates everywhere.
+export const SITE_NAME = 'LayoffLedger'
+export const SITE_TAGLINE = 'Source-linked records of U.S. layoffs, and what to do next.'
+
 export const JOBQUE_URL = 'https://jobque.ai'
 
 // Placeholder promo details shown on company pages until the real ones exist.

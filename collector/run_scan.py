@@ -31,7 +31,7 @@ def fetch_and_clean_text(url: str, title: str) -> str:
     if "news.google.com" in url or ".local" in url:
         return title
 
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LayoffRadar/1.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LayoffLedger/1.0"}
     try:
         resp = requests.get(url, headers=headers, timeout=3, allow_redirects=True)
         if resp.status_code == 200:

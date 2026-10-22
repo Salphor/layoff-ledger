@@ -1,5 +1,6 @@
 import { getLatestLayoffs } from '@/lib/api'
 import LayoffsExplorer from '@/app/components/LayoffsExplorer'
+import { SITE_NAME } from '@/lib/site'
 
 export const revalidate = 60 // frequent revalidation for feed
 export const metadata = { title: 'Latest Layoffs' }
@@ -15,7 +16,7 @@ export default async function LatestLayoffsPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">Event database</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight">Latest Layoffs</h1>
           <p className="mt-3 max-w-2xl text-white/70">
-            Canonical public event records tracked by Radar, each linked to its original source.
+            Public layoff records tracked by {SITE_NAME}, each linked to its original source.
           </p>
         </div>
       </section>

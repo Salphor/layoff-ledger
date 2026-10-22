@@ -1,5 +1,5 @@
 import { ArrowRight, Briefcase } from 'lucide-react'
-import { JOBQUE_URL } from '@/lib/site'
+import { JOBQUE_URL, SITE_NAME } from '@/lib/site'
 
 export default function JobQueCampaignCard() {
   return (
@@ -12,7 +12,7 @@ export default function JobQueCampaignCard() {
         </div>
         <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">Affected by a recent layoff?</h3>
         <p className="mt-4 text-base leading-relaxed text-white/70 sm:text-lg">
-          Layoff Radar exists to bring transparency to the labor market. If you are impacted by any of these events,
+          {SITE_NAME} exists to bring transparency to the labor market. If you are impacted by any of these events,
           JobQue provides specialized tools to accelerate your next placement.
         </p>
         <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary mt-8 !px-8 !py-3.5">

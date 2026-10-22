@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, FileSearch, ShieldCheck, Radio } from 'lucide-react'
-import { getLatestLayoffs, getRadarStats } from '@/lib/api'
-import { formatDate, companyHref } from '@/lib/site'
+import { getLatestLayoffs, getSiteStats } from '@/lib/api'
+import { formatDate, companyHref, SITE_NAME } from '@/lib/site'
 import { JOLTS } from '@/lib/stats'
 import JobQueCampaignCard from './components/JobQueCampaignCard'
 
@@ -27,7 +27,7 @@ const STEPS = [
 
 export default async function Home() {
   const latestEvents = await getLatestLayoffs(3)
-  const stats = await getRadarStats()
+  const stats = await getSiteStats()
 
   return (
     <div className="flex flex-col">
@@ -35,8 +35,8 @@ export default async function Home() {
       <section className="relative overflow-hidden bg-gradient-to-br from-brand-green via-brand-green-dark to-brand-green-dark text-white">
         <div className="bg-grid absolute inset-0" />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="animate-radar h-[420px] w-[420px] rounded-full border border-brand-gold/30" />
-          <div className="animate-radar absolute h-[420px] w-[420px] rounded-full border border-brand-gold/30" style={{ animationDelay: '2.5s' }} />
+          <div className="animate-ring h-[420px] w-[420px] rounded-full border border-brand-gold/30" />
+          <div className="animate-ring absolute h-[420px] w-[420px] rounded-full border border-brand-gold/30" style={{ animationDelay: '2.5s' }} />
         </div>
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-brand-green-dark to-transparent" />
 
@@ -91,13 +91,13 @@ export default async function Home() {
             BLS Job Openings and Labor Turnover Survey (JOLTS)
           </a>
           , released {JOLTS.released}. BLS metrics cover all separations nationwide and differ from the discrete,
-          source-linked events tracked by Layoff Radar.
+          source-linked events tracked by {SITE_NAME}.
         </p>
         <div className="mt-6 flex items-center justify-center gap-2 rounded-lg border border-brand-tan/60 bg-white px-4 py-3 text-sm text-brand-navy/75">
           <span className="h-2 w-2 rounded-full bg-brand-gold" />
           <span>
             <strong className="font-semibold text-brand-green">{stats.eventsTracked.toLocaleString()}</strong> public layoff
-            events indexed by Layoff Radar from WARN notices and filings
+            events indexed by {SITE_NAME} from WARN notices and filings
           </span>
         </div>
       </section>
@@ -139,7 +139,7 @@ export default async function Home() {
           <div className="mx-auto max-w-2xl text-center">
             <p className="eyebrow">Methodology</p>
             <h2 className="mt-2 text-3xl font-bold tracking-tight">Built on evidence, not rumor</h2>
-            <p className="mt-4 text-brand-navy/70">Radar only publishes events that trace back to a public record.</p>
+            <p className="mt-4 text-brand-navy/70">{SITE_NAME} only publishes events that trace back to a public record.</p>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {STEPS.map((s, i) => (

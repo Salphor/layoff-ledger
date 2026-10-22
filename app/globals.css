@@ -36,15 +36,15 @@
   -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
 }
 
-/* Radar sweep animation */
-@keyframes radar-scan {
+/* Expanding ring animation (decorative) */
+@keyframes ring-pulse {
   0%   { transform: scale(0.6); opacity: 0.7; }
   100% { transform: scale(2.2); opacity: 0; }
 }
-.animate-radar { animation: radar-scan 5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.animate-ring { animation: ring-pulse 5s cubic-bezier(0, 0, 0.2, 1) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-radar, .animate-pulse { animation: none; }
+  .animate-ring, .animate-pulse { animation: none; }
 }
 
 details > summary { list-style: none; }
