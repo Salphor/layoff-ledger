@@ -3,7 +3,6 @@ import csv
 import hashlib
 import os
 import time
-import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -47,16 +46,6 @@ DEFAULT_MAX_DAYS_OLD = 45
 
 SCRAPE_TIMEOUT_SECONDS = 300
 
-# Texas: the library's scraper is refused by the Texas Workforce Commission
-# site ("Scraper isn't scraping"). As a fallback we fetch the same yearly Excel
-# files ourselves, looking like an ordinary browser.
-TX_PAGE = "https://www.twc.texas.gov/data-reports/warn-notice"
-BROWSER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
 
 
 class StateWarnAdapter:
@@ -97,56 +86,6 @@ class StateWarnAdapter:
             return False
         return True
 
-    def _tx_direct(self) -> bool:
-        """Fallback for Texas: download this year's and last year's Excel lists directly."""
-        try:
-            import httpx
-            from openpyxl import load_workbook
-        except ImportError as e:
-            print(f"[WARN TX] fallback unavailable: {e}", flush=True)
-            return False
-        this_year = datetime.now().year
-        try:
-            with httpx.Client(headers=BROWSER_HEADERS, follow_redirects=True, timeout=60) as client:
-                page = client.get(TX_PAGE)
-                if page.status_code != 200:
-                    print(f"[WARN TX] fallback: listing page returned HTTP {page.status_code}", flush=True)
-                    return False
-                links = sorted(set(re.findall(
-                    r'href="(/sites/default/files/oei/docs/warn-act-listings-[^"]*?(\d{4})[^"]*?\.xlsx?)"',
-                    page.text, re.I)))
-                wanted = [href for href, year in links if int(year) >= this_year - 1]
-                if not wanted:
-                    print("[WARN TX] fallback: no spreadsheet links found on the page", flush=True)
-                    return False
-                rows, header = [], None
-                for href in wanted:
-                    r = client.get(f"https://www.twc.texas.gov{href}")
-                    if r.status_code != 200:
-                        print(f"[WARN TX] fallback: {href} returned HTTP {r.status_code}", flush=True)
-                        continue
-                    xlsx = self.cache_dir / "tx_direct.xlsx"
-                    xlsx.write_bytes(r.content)
-                    sheet = load_workbook(xlsx, read_only=True, data_only=True).worksheets[0]
-                    for i, row in enumerate(sheet.iter_rows(values_only=True)):
-                        if i == 0:
-                            header = header or [str(c or "").strip() for c in row]
-                            continue
-                        if row and row[0] is not None:
-                            rows.append(["" if c is None else str(c) for c in row])
-            if not header or not rows:
-                print("[WARN TX] fallback: spreadsheets had no rows", flush=True)
-                return False
-            with open(self.output_dir / "tx.csv", "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(header)
-                w.writerows(rows)
-            print(f"[WARN TX] fallback succeeded: {len(rows)} rows from {len(wanted)} file(s)", flush=True)
-            return True
-        except Exception as e:
-            print(f"[WARN TX] fallback failed: {e!r}", flush=True)
-            return False
-
     def _read_state(self, state):
         csv_file = self.output_dir / f"{state}.csv"
         if not csv_file.exists():
@@ -166,10 +105,10 @@ class StateWarnAdapter:
             if not fields["company"]:
                 no_company += 1
                 continue
-            if not fields["notice_date"]:
+            if not fields["key_date"]:
                 no_date += 1
                 continue
-            if fields["notice_date"] < self.cutoff:
+            if fields["key_date"] < self.cutoff:
                 old += 1
                 continue
 
@@ -189,8 +128,9 @@ class StateWarnAdapter:
                 "publisher": f"{state.upper()} State WARN Registry",
                 "url": f"https://warn-registry-{state}.local",
                 "title": f"WARN Notice: {fields['company']}",
-                "published_at": fields["notice_date"],
-                "fingerprint": self._fingerprint(fields["company_raw"], fields["notice_date_raw"]),
+                # Date we first saw it if the state gives no notice date (GA, PA).
+                "published_at": fields["notice_date"] or datetime.now().strftime("%Y-%m-%d"),
+                "fingerprint": self._fingerprint(fields["company_raw"], fields["key_date_raw"]),
                 "metadata": {
                     "company_name": fields["company"],
                     "affected_count": fields["headcount"],
@@ -210,7 +150,8 @@ class StateWarnAdapter:
         )
         # If nothing could be read at all, the column names have probably changed.
         if no_company == len(rows) or no_date == len(rows):
-            self.report[state] += "  <-- CHECK: column names not recognised"
+            sample = {k: v for k, v in rows[0].items() if k}
+            self.report[state] += f"  <-- CHECK: column names not recognised. First row: {sample}"
         return kept
 
     async def _one_state(self, state, gate):
@@ -218,8 +159,6 @@ class StateWarnAdapter:
             started = time.monotonic()
             try:
                 ok = await asyncio.to_thread(self._run_state_scrape, state)
-                if not ok and state == "tx":
-                    ok = await asyncio.to_thread(self._tx_direct)
                 items = self._read_state(state)
                 if not ok and state in self.report:
                     self.report[state] = "scraper failed; " + self.report[state]

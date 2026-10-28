@@ -18,20 +18,41 @@ from datetime import datetime
 
 # Column-name keywords, checked in order. Names are compared lowercased with
 # punctuation turned into spaces, e.g. "TOTAL_LAYOFF_NUMBER" -> "total layoff number".
+# A keyword matches a column that equals it or contains it; keywords starting
+# with "=" only match a column with exactly that name (for short, generic words).
+# The state comments show which states each addition is for.
 COMPANY_KEYS = [
     "company name", "company", "employer name", "employer", "job site name",
-    "business name", "organization", "business",
+    "business name", "organization", "business", "name of company",
+    "=title",  # MO
 ]
 HEADCOUNT_KEYS = [
     "num employees", "number of employees", "employees affected", "employees",
     "number of workers", "workers affected", "workers", "total layoff number",
     "layoff number", "affected", "headcount", "layoff num",
+    "laid off",  # OR
+    "=jobs",     # PA, SC, OK
+    "=emp",      # IA "Emp #"
 ]
-NOTICE_KEYS = ["notice date", "date of notice", "notice dated", "warn date", "notice"]
-RECEIVED_KEYS = ["received date", "date received", "wfdd received date", "received"]
+NOTICE_KEYS = [
+    "notice date", "date of notice", "notice dated", "warn date",
+    "initial report date",  # AL
+    "warn document date",   # CT
+    "notice",
+    "=date",                # NE, SC
+]
+RECEIVED_KEYS = [
+    "received date", "date received", "wfdd received date", "received",
+    "date posted", "month posted",  # NJ (month only)
+]
 EFFECTIVE_KEYS = [
     "effective date", "layoff start date", "layoff date", "start date",
-    "layoff closure starts",  # NY: "Date Layoff/Closure Starts"
+    "layoff closure starts",   # NY: "Date Layoff/Closure Starts"
+    "planned starting date",   # AL
+    "date of separation",      # GA: "First Date of Separation"
+    "layoff begin date",       # WI
+    "date of impact", "impact date",  # MT, VA
+    "lo cl date",              # IN
     "closure date", "separation date", "effective", "starts",
 ]
 CITY_KEYS = ["city name", "city", "location"]  # TX CITY_NAME, CA city, WA Location
@@ -41,6 +62,7 @@ COUNTY_KEYS = ["county name", "county"]
 DATE_FORMATS = (
     "%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
     "%m-%d-%Y", "%b %d, %Y", "%B %d, %Y", "%d-%b-%y", "%d-%b-%Y",
+    "%B %Y", "%b %Y", "%m/%Y", "%Y-%m",  # month-only dates (NJ) -> 1st of month
 )
 
 
@@ -51,12 +73,15 @@ def _norm_key(key) -> str:
 def _find(row: dict, candidates: list, exclude: tuple = ()):
     """Value of the first column whose name matches a candidate keyword."""
     keyed = {_norm_key(k): v for k, v in row.items() if k is not None}
-    # Exact names first, then "contains" matches.
+    # Keywords are tried in order; each one first as an exact column name, then
+    # (unless it starts with "=") as part of a longer column name.
     for want in candidates:
-        v = keyed.get(want)
+        exact = want.lstrip("=")
+        v = keyed.get(exact)
         if v is not None and str(v).strip():
             return str(v).strip()
-    for want in candidates:
+        if want.startswith("="):
+            continue
         for k, v in keyed.items():
             if want in k and not any(x in k for x in exclude):
                 if v is not None and str(v).strip():
@@ -139,8 +164,10 @@ def normalize_warn_row(row: dict, state: str) -> dict:
     # "Notice" column that may not), otherwise the date the state received it.
     if parse_date(notice_raw):
         date_raw = notice_raw
-    else:
+    elif parse_date(received_raw):
         date_raw = received_raw
+    else:
+        date_raw = None
 
     place = city or _city_from_address(address)
     if place:
@@ -160,6 +187,10 @@ def normalize_warn_row(row: dict, state: str) -> dict:
         "notice_date_raw": date_raw,
         "notice_date": parse_date(date_raw),
         "effective_date": parse_date(effective_raw),
+        # Some states (GA, PA) list only the layoff date, not when notice was
+        # given. That date is used for the duplicate check and the 45-day window.
+        "key_date_raw": date_raw or effective_raw,
+        "key_date": parse_date(date_raw) or parse_date(effective_raw),
         "headcount": parse_headcount(headcount_raw),
         "location": location,
         "state": st,
