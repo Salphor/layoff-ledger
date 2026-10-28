@@ -39,7 +39,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <RadarMark />
               <span className="text-lg font-bold tracking-[-0.03em]">{SITE_NAME}</span>
             </Link>
-            <nav className="order-3 flex w-full items-center gap-5 sm:order-none sm:w-auto" aria-label="Main">
+            {/* sm:ml-auto pushes the menu right, next to the JobQueAi button */}
+            <nav className="order-3 flex w-full items-center gap-6 sm:order-none sm:ml-auto sm:w-auto" aria-label="Main">
               {NAV.map((n) => (
                 <Link key={n.href} href={n.href} className="label py-1 hover:underline hover:decoration-2 hover:underline-offset-4">
                   {n.label}
