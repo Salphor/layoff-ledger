@@ -4,6 +4,8 @@ import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from match import process_candidate
+# Shared with run_scan.py so both paths read WARN rows the same way.
+from warn_fields import build_warn_payload
 
 # WARN notices need no Gemini calls, so large batches are cheap. Override with the
 # QUEUE_BATCH_SIZE environment variable if needed.
@@ -12,53 +14,6 @@ TIME_BUDGET_SECONDS = 12 * 60  # stop before the 15-minute workflow timeout
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
-
-def build_warn_payload(source):
-    """
-    Builds the extracted_json for an official WARN notice. This mirrors the
-    structured-WARN branch of run_scan.py so both paths produce identical
-    candidates (same company naming, same field names).
-
-    IMPORTANT: match.py rejects any candidate whose JSON has no top-level
-    "company_name", so it must be included here.
-    """
-    metadata = source.get("metadata") or {}
-    if isinstance(metadata, str):
-        try:
-            metadata = json.loads(metadata)
-        except Exception:
-            metadata = {}
-
-    raw_row = metadata.get("raw_row") or {}
-    state = str(metadata.get("state") or "US").upper()
-    company_name = (
-        raw_row.get("company")
-        or raw_row.get("company_name")
-        or (source.get("title") or "").replace("WARN Notice: ", "")
-        or "Unknown Company"
-    )
-
-    employees = raw_row.get("employees", 0)
-    headcount = int(employees) if str(employees).isdigit() else None
-    if not headcount:
-        headcount = metadata.get("affected_count") or None
-
-    notice_date = metadata.get("notice_date") or metadata.get("date") or None
-
-    summary = f"Official {state} State WARN Notice filed by {company_name}."
-    if headcount:
-        summary += f" Affects {headcount} workers."
-
-    return {
-        "source_id": str(source["source_id"]),
-        "company_name": company_name,
-        "headcount": headcount,
-        "date_announced": notice_date,
-        "is_layoff": True,
-        "source_type": "warn_database",
-        "summary": summary,
-    }
-
 
 def extract_and_save_candidate(conn, source):
     """Creates a pending candidate for an official WARN notice source."""
