@@ -1,164 +1,137 @@
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, FileSearch, ShieldCheck, Radio } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { getLatestLayoffs, getSiteStats } from '@/lib/api'
-import { formatDate, companyHref, SITE_NAME } from '@/lib/site'
+import { companyHref, isoDate, SITE_NAME, workersCount } from '@/lib/site'
 import { JOLTS } from '@/lib/stats'
 import JobQueCampaignCard from './components/JobQueCampaignCard'
 
 export const revalidate = 3600 // Revalidate hourly
 
 const STEPS = [
-  {
-    icon: Radio,
-    title: 'Monitor',
-    body: 'Continuous collection from state WARN notices, SEC filings, press-release wires, and company newsrooms.',
-  },
-  {
-    icon: FileSearch,
-    title: 'Match & extract',
-    body: 'Each signal is matched to a canonical company and reduced to structured, comparable event data.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Publish with evidence',
-    body: 'Every record links back to its original source so you can verify the claim yourself.',
-  },
+  { n: '01', title: 'Monitor', body: 'We collect state WARN notices and news reports continuously.' },
+  { n: '02', title: 'Match', body: 'Each notice or report is matched to one company and one layoff event.' },
+  { n: '03', title: 'Publish with sources', body: 'Every record links to the original filing or article so you can check it.' },
 ]
 
 export default async function Home() {
-  const latestEvents = await getLatestLayoffs(3)
-  const stats = await getSiteStats()
+  const [latestEvents, stats] = await Promise.all([getLatestLayoffs(8), getSiteStats()])
 
   return (
     <div className="flex flex-col">
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-brand-green via-brand-green-dark to-brand-green-dark text-white">
-        <div className="bg-grid absolute inset-0" />
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="animate-ring h-[420px] w-[420px] rounded-full border border-brand-gold/30" />
-          <div className="animate-ring absolute h-[420px] w-[420px] rounded-full border border-brand-gold/30" style={{ animationDelay: '2.5s' }} />
-        </div>
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-brand-green-dark to-transparent" />
-
-        <div className="container-page relative z-10 pb-40 pt-24 text-center sm:pt-28">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/80">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-gold opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-gold" />
-            </span>
-            Live monitoring of public filings
-          </span>
-          <h1 className="mx-auto mt-8 max-w-4xl text-4xl font-bold tracking-tight sm:text-6xl">
-            Layoff intelligence, <span className="text-brand-gold">verified at the source.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/70 sm:text-xl">
-            Source-first tracking of the labor market. See where layoffs are happening and verify the evidence behind every record.
+      {/* Number first */}
+      <section className="bg-ink text-white">
+        <div className="container-page py-14 sm:py-20">
+          <p className="label text-lime">[ Workers in tracked U.S. layoffs ]</p>
+          <p className="giant mt-4">
+            {stats.employeesAffected.toLocaleString('en-US')}
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/layoffs" className="btn-primary !px-8 !py-3.5">
-              View latest layoffs <ArrowRight size={16} />
-            </Link>
-            <a href="#how-it-works" className="btn-ghost !px-8 !py-3.5">How it works</a>
-          </div>
-        </div>
-      </section>
-
-      {/* National statistics (BLS JOLTS) overlapping hero */}
-      <section className="container-page relative z-20 -mt-24">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">
-            U.S. labor market &middot; {JOLTS.period}
-          </p>
-          <p className="text-xs text-white/70">Source: U.S. Bureau of Labor Statistics</p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {JOLTS.stats.map((s) => (
-            <div key={s.label} className="rounded-xl border-t-4 border-brand-gold bg-white p-6 shadow-lift">
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand-navy/55">{s.label}</p>
-              <p className="mt-3 text-4xl font-bold tracking-tight text-brand-green">{s.value}</p>
-              <p className="mt-2 text-sm text-brand-navy/60">{s.note}</p>
+          <div className="mt-8 grid gap-8 md:grid-cols-12 md:items-end">
+            <h1 className="text-[28px] font-bold leading-[1.1] tracking-display sm:text-4xl md:col-span-7">
+              Every U.S. layoff we can verify, linked to its source. And what to do next if it&rsquo;s you.
+            </h1>
+            <div className="flex flex-wrap gap-3 md:col-span-5 md:justify-end">
+              <Link href="/layoffs" className="btn-lime">
+                Latest layoffs <ArrowRight size={16} />
+              </Link>
+              <Link href="/companies" className="btn-ghost">
+                Find a company
+              </Link>
             </div>
-          ))}
-        </div>
-        <p className="mt-4 text-xs leading-relaxed text-brand-navy/60">
-          Seasonally adjusted figures from the{' '}
-          <a
-            href={JOLTS.sourceUrl}
-            className="underline decoration-brand-tan underline-offset-2 hover:text-brand-green"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            BLS Job Openings and Labor Turnover Survey (JOLTS)
-          </a>
-          , released {JOLTS.released}. BLS metrics cover all separations nationwide and differ from the discrete,
-          source-linked events tracked by {SITE_NAME}.
-        </p>
-        <div className="mt-6 flex items-center justify-center gap-2 rounded-lg border border-brand-tan/60 bg-white px-4 py-3 text-sm text-brand-navy/75">
-          <span className="h-2 w-2 rounded-full bg-brand-gold" />
-          <span>
-            <strong className="font-semibold text-brand-green">{stats.eventsTracked.toLocaleString()}</strong> public layoff
-            events indexed by {SITE_NAME} from WARN notices and filings
-          </span>
+          </div>
+          <p className="mt-8 font-mono text-xs text-grey">
+            {stats.eventsTracked.toLocaleString('en-US')} PUBLIC LAYOFF EVENTS / WARN NOTICES AND NEWS REPORTS
+          </p>
         </div>
       </section>
 
-      {/* Latest signals */}
-      <section className="container-page py-20">
-        <div className="mb-8 flex items-end justify-between gap-4">
+      {/* Latest */}
+      <section className="container-page py-14">
+        <div className="mb-5 flex items-end justify-between gap-4">
           <div>
-            <p className="eyebrow">Newest records</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight">Latest monitored signals</h2>
+            <p className="label">[ Newest records ]</p>
+            <h2 className="mt-2 text-[32px] font-bold leading-none tracking-display">Latest layoffs</h2>
           </div>
-          <Link href="/layoffs" className="hidden items-center gap-1 text-sm font-semibold text-brand-green hover:underline sm:inline-flex">
+          <Link href="/layoffs" className="label hidden items-center gap-1 hover:underline sm:inline-flex">
             View all <ArrowRight size={14} />
           </Link>
         </div>
-        <div className="grid gap-5 md:grid-cols-3">
-          {latestEvents.map((event) => (
-            <Link
-              href={companyHref(event.company)}
-              key={event.id}
-              className="card group flex flex-col p-6 transition hover:-translate-y-0.5 hover:border-brand-green/40 hover:shadow-lift"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-lg font-bold leading-snug text-brand-navy">{event.company?.canonical_name}</h3>
-                <ArrowUpRight size={18} className="mt-1 shrink-0 text-brand-navy/30 transition group-hover:text-brand-green" />
-              </div>
-              <p className="mt-1 text-xs font-medium uppercase tracking-wide text-brand-navy/50">
-                {formatDate(event.date_announced || event.announcement_date || event.created_at, 'long')}
-              </p>
-              <p className="mt-4 line-clamp-3 text-sm leading-relaxed text-brand-navy/75">{event.summary}</p>
-            </Link>
+        <ul className="border-2 border-ink bg-white">
+          {latestEvents.map((event) => {
+            const count = workersCount(event)
+            return (
+              <li key={event.id} className="border-b-2 border-ink last:border-b-0">
+                <Link
+                  href={event.event_path || companyHref(event.company)}
+                  className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-1 px-5 py-4 transition-colors hover:bg-lime-tint sm:grid-cols-[150px_minmax(0,1fr)_auto]"
+                >
+                  <span className={`font-bold leading-none tabular-nums ${event.employees_affected ? 'text-[28px] tracking-[-0.04em] sm:text-[32px]' : 'text-lg tracking-[-0.02em]'}`}>
+                    {count ?? <span className="font-mono text-xs font-normal tracking-normal text-muted">NOT DISCLOSED</span>}
+                  </span>
+                  <span className="order-3 col-span-2 min-w-0 sm:order-none sm:col-span-1">
+                    <span className="block text-lg font-bold leading-snug group-hover:underline group-hover:decoration-2">
+                      {event.company?.canonical_name}
+                    </span>
+                    <span className="block truncate text-sm text-muted">{event.summary}</span>
+                  </span>
+                  <span className="flex items-center gap-3 font-mono text-sm">
+                    {isoDate(event.date_announced || event.announcement_date || event.created_at)}
+                    <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                  </span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+        <Link href="/layoffs" className="btn-secondary mt-5 sm:hidden">
+          View all layoffs <ArrowRight size={16} />
+        </Link>
+      </section>
+
+      {/* National context */}
+      <section className="container-page pb-14">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="label">[ U.S. labor market / {JOLTS.period} ]</p>
+            <h2 className="mt-2 text-[32px] font-bold leading-none tracking-display">The national picture</h2>
+          </div>
+          <p className="font-mono text-xs text-muted">SOURCE: U.S. BUREAU OF LABOR STATISTICS</p>
+        </div>
+        {/* 2px black gaps between cells read as rules */}
+        <div className="grid gap-[2px] border-2 border-ink bg-ink sm:grid-cols-2 lg:grid-cols-4">
+          {JOLTS.stats.map((s) => (
+            <div key={s.label} className="bg-white p-5">
+              <p className="label text-muted">{s.label}</p>
+              <p className="mt-3 text-5xl font-bold leading-none tracking-display tabular-nums">{s.value}</p>
+              <p className="mt-3 text-sm text-muted">{s.note}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 max-w-3xl text-xs leading-relaxed text-muted">
+          Seasonally adjusted figures from the{' '}
+          <a href={JOLTS.sourceUrl} className="link" target="_blank" rel="noopener noreferrer">
+            BLS Job Openings and Labor Turnover Survey (JOLTS)
+          </a>
+          , released {JOLTS.released}. They cover all separations nationwide, not just the public layoff events tracked by{' '}
+          {SITE_NAME}.
+        </p>
+      </section>
+
+      {/* How it works */}
+      <section id="how-it-works" className="container-page pb-14">
+        <p className="label">[ Method ]</p>
+        <h2 className="mb-5 mt-2 text-[32px] font-bold leading-none tracking-display">Built on public records</h2>
+        <div className="border-t-2 border-ink">
+          {STEPS.map((s) => (
+            <div key={s.n} className="grid gap-2 border-b-2 border-ink py-6 md:grid-cols-12 md:gap-6">
+              <p className="label md:col-span-2">[ {s.n} ]</p>
+              <p className="text-2xl font-bold tracking-[-0.03em] md:col-span-3">{s.title}</p>
+              <p className="text-[17px] leading-relaxed text-muted md:col-span-7">{s.body}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* How it works */}
-      <section id="how-it-works" className="border-y border-brand-tan/60 bg-white py-20">
-        <div className="container-page">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow">Methodology</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight">Built on evidence, not rumor</h2>
-            <p className="mt-4 text-brand-navy/70">{SITE_NAME} only publishes events that trace back to a public record.</p>
-          </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {STEPS.map((s, i) => (
-              <div key={s.title} className="rounded-xl border border-brand-tan/60 bg-brand-canvas/60 p-7">
-                <div className="flex items-center justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-green text-brand-gold">
-                    <s.icon size={20} />
-                  </div>
-                  <span className="text-sm font-semibold text-brand-navy/30">0{i + 1}</span>
-                </div>
-                <h3 className="mt-5 text-lg font-bold">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-brand-navy/70">{s.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="container-page py-20">
+      <section className="container-page pb-16">
         <JobQueCampaignCard />
       </section>
     </div>

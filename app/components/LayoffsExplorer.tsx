@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { ChevronRight, MapPin, Search, Users, X } from 'lucide-react'
+import { ArrowRight, Search, X } from 'lucide-react'
 import type { LayoffEvent } from '@/lib/types'
-import { asStringList, formatDate, companyHref } from '@/lib/site'
+import { asStringList, companyHref, isoDate, workersCount } from '@/lib/site'
 
 const PAGE_SIZE = 25
 
@@ -16,7 +16,7 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return events.filter((e) => {
-      if (onlyCounts && !(e.employees_affected || e.employee_count_text)) return false
+      if (onlyCounts && !workersCount(e)) return false
       if (!q) return true
       const hay = [e.company?.canonical_name, e.summary, ...asStringList(e.locations)].join(' ').toLowerCase()
       return hay.includes(q)
@@ -27,110 +27,98 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
 
   return (
     <div>
-      <div className="card mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
         <div className="relative flex-1">
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-navy/40" />
+          <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
-            type="text"
+            type="search"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setVisible(PAGE_SIZE) }}
-            placeholder="Search company, location, or keyword"
+            placeholder="Search company, location or keyword"
             aria-label="Search layoffs"
-            className="w-full rounded-lg border border-brand-tan/60 bg-brand-canvas/60 py-2.5 pl-10 pr-9 text-sm placeholder:text-brand-navy/40 focus:border-brand-green focus:bg-white"
+            className="h-12 w-full border-2 border-ink bg-white pl-12 pr-10 text-base placeholder:text-muted focus:bg-lime-tint focus:outline-none"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-brand-navy/40 hover:text-brand-navy"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-lime"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           )}
         </div>
-        <label className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-brand-tan/60 px-3 py-2.5 text-sm font-medium text-brand-navy/80 hover:bg-brand-canvas/60">
+        <label className="flex h-12 cursor-pointer select-none items-center gap-2 border-2 border-ink bg-white px-4 text-sm font-semibold hover:bg-lime-tint">
           <input
             type="checkbox"
             checked={onlyCounts}
             onChange={(e) => { setOnlyCounts(e.target.checked); setVisible(PAGE_SIZE) }}
-            className="h-4 w-4 rounded border-brand-tan accent-brand-green"
+            className="h-4 w-4 accent-ink"
           />
           Disclosed counts only
         </label>
       </div>
 
-      <p className="mb-3 px-1 text-xs font-medium text-brand-navy/55">
+      <p className="label mt-6 mb-3 text-muted">
         Showing {shown.length.toLocaleString()} of {filtered.length.toLocaleString()} records
       </p>
 
-      <div className="card overflow-hidden">
-        <div className="hidden grid-cols-12 gap-4 border-b border-brand-tan/60 bg-brand-canvas/60 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-brand-navy/55 md:grid">
-          <div className="col-span-3">Company</div>
-          <div className="col-span-5">Summary</div>
-          <div className="col-span-2">Workers</div>
-          <div className="col-span-2">Location</div>
+      <div className="border-2 border-ink bg-white">
+        <div className="hidden grid-cols-12 gap-6 border-b-2 border-ink px-5 py-3 md:grid">
+          <div className="label col-span-2">[ Workers ]</div>
+          <div className="label col-span-3">[ Company ]</div>
+          <div className="label col-span-5">[ Summary ]</div>
+          <div className="label col-span-2">[ Announced ]</div>
         </div>
 
         {shown.length === 0 && (
           <div className="px-6 py-16 text-center">
-            <p className="font-semibold">No records match your filters.</p>
-            <p className="mt-1 text-sm text-brand-navy/60">Try a different search term.</p>
+            <p className="text-lg font-bold">No records match.</p>
+            <p className="mt-1 text-sm text-muted">Try a different search, or browse <Link href="/companies" className="link">companies A–Z</Link>.</p>
           </div>
         )}
 
-        <ul className="divide-y divide-brand-tan/50">
-          {shown.map((event) => (
-            <li key={event.id}>
-              <Link
-                href={companyHref(event.company)}
-                aria-disabled={!event.company}
-                onClick={(e) => { if (!event.company) e.preventDefault() }}
-                className="group grid gap-3 px-6 py-5 transition hover:bg-brand-green/[0.04] md:grid-cols-12 md:items-center md:gap-4"
-              >
-                <div className="md:col-span-3">
-                  <p className="font-semibold leading-snug text-brand-navy group-hover:text-brand-green">
-                    {event.company?.canonical_name || 'Company unavailable'}
-                  </p>
-                  <p className="mt-0.5 text-xs text-brand-navy/50">
-                    {formatDate(event.date_announced || event.announcement_date || event.created_at)}
-                  </p>
-                </div>
-                <p className="line-clamp-2 text-sm leading-relaxed text-brand-navy/75 md:col-span-5">{event.summary}</p>
-                <div className="md:col-span-2">
-                  {event.employees_affected || event.employee_count_text ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-green/10 px-2.5 py-1 text-xs font-semibold text-brand-green">
-                      <Users size={12} />
-                      {event.employees_affected?.toLocaleString() || event.employee_count_text}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-brand-navy/40">Not disclosed</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2 md:col-span-2">
-                  <span className="flex min-w-0 items-center gap-1.5 text-xs text-brand-navy/65">
-                    {asStringList(event.locations).length > 0 ? (
-                      <>
-                        <MapPin size={12} className="shrink-0" />
-                        <span className="truncate">{asStringList(event.locations).join(', ')}</span>
-                      </>
+        <ul>
+          {shown.map((event) => {
+            const count = workersCount(event)
+            const href = event.event_path || companyHref(event.company)
+            const places = asStringList(event.locations)
+            return (
+              <li key={event.id} className="border-b-2 border-ink last:border-b-0">
+                <Link
+                  href={href}
+                  aria-disabled={!event.company}
+                  onClick={(e) => { if (!event.company) e.preventDefault() }}
+                  className="group grid gap-2 px-5 py-5 transition-colors hover:bg-lime-tint md:grid-cols-12 md:items-center md:gap-6"
+                >
+                  <div className="md:col-span-2">
+                    {count ? (
+                      <span className={`font-bold leading-none tabular-nums ${event.employees_affected ? 'text-[32px] tracking-[-0.04em]' : 'text-lg'}`}>{count}</span>
                     ) : (
-                      <span className="text-brand-navy/40">—</span>
+                      <span className="font-mono text-xs text-muted">NOT DISCLOSED</span>
                     )}
-                  </span>
-                  <ChevronRight size={16} className="shrink-0 text-brand-navy/25 transition group-hover:translate-x-0.5 group-hover:text-brand-green" />
-                </div>
-              </Link>
-            </li>
-          ))}
+                  </div>
+                  <div className="md:col-span-3">
+                    <p className="text-lg font-bold leading-snug group-hover:underline group-hover:decoration-2">
+                      {event.company?.canonical_name || 'Company unavailable'}
+                    </p>
+                    {places.length > 0 && <p className="mt-0.5 truncate text-sm text-muted">{places.join(', ')}</p>}
+                  </div>
+                  <p className="line-clamp-2 text-[15px] leading-relaxed text-muted md:col-span-5">{event.summary}</p>
+                  <div className="flex items-center justify-between gap-2 md:col-span-2">
+                    <span className="font-mono text-sm">{isoDate(event.date_announced || event.announcement_date || event.created_at)}</span>
+                    <ArrowRight size={18} className="shrink-0 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                  </div>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       </div>
 
       {visible < filtered.length && (
         <div className="mt-6 text-center">
-          <button
-            onClick={() => setVisible((v) => v + PAGE_SIZE)}
-            className="rounded-lg border border-brand-tan bg-white px-6 py-2.5 text-sm font-semibold transition hover:border-brand-green hover:text-brand-green"
-          >
+          <button onClick={() => setVisible((v) => v + PAGE_SIZE)} className="btn-secondary">
             Load more
           </button>
         </div>

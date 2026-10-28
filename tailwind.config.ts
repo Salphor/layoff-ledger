@@ -1,5 +1,7 @@
 import type { Config } from 'tailwindcss'
 
+// Signal design system (LayoffLedger style guide, direction G).
+// Black, white and one electric lime. Square corners, 2px black rules.
 const config: Config = {
   content: [
     './app/*.{js,ts,jsx,tsx,mdx}',
@@ -10,21 +12,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          green: '#2C5F3E',
-          'green-dark': '#1F4A2F',
-          gold: '#CBA95D',
-          canvas: '#F1F1F1',
-          tan: '#DDC6A4',
-          navy: '#142238',
-        },
+        ink: '#0A0A0A', // text, rules, buttons, bands
+        muted: '#555555', // secondary text (7.5:1 on white)
+        bone: '#F2F2EF', // page background
+        lime: '#C6F432', // button text on black, marker behind numbers. Never text on white.
+        'lime-tint': '#EEF9C8', // "what to do next" block
+        ultra: '#2F2FE4', // links and source names only
+        grey: '#BDBDB6', // secondary text on black
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-grotesk)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'Menlo', 'monospace'],
       },
-      boxShadow: {
-        card: '0 1px 2px rgba(20,34,56,0.04), 0 1px 3px rgba(20,34,56,0.06)',
-        lift: '0 4px 6px -1px rgba(20,34,56,0.06), 0 12px 24px -6px rgba(20,34,56,0.12)',
+      letterSpacing: {
+        giant: '-0.05em',
+        display: '-0.04em',
+      },
+      borderWidth: {
+        3: '3px',
       },
     },
   },

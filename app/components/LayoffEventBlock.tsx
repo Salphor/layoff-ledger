@@ -1,4 +1,5 @@
-import { ExternalLink, FileText, Newspaper } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import type { LayoffEvent } from '@/lib/types'
 import { formatDate } from '@/lib/site'
 import { toDisplaySources } from '@/lib/sources'
@@ -17,6 +18,51 @@ export function eventDate(event: LayoffEvent): string {
   return event.date_announced || event.announcement_date || event.notice_date || event.created_at
 }
 
+// Numbered source rows: official WARN filings first, then news.
+export function SourceList({ event }: { event: LayoffEvent }) {
+  const sources = toDisplaySources(event.sources)
+  if (sources.length === 0) {
+    return <p className="text-sm text-muted">No article links are available for this event yet.</p>
+  }
+  return (
+    <ol className="border-2 border-ink bg-white">
+      {sources.map((s, i) => {
+        const body = (
+          <>
+            <span className="font-mono text-sm font-bold tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className={`text-sm font-bold ${s.href ? 'text-ultra' : ''}`}>{s.label}</span>
+                {s.kind === 'warn' && <span className="pill bg-lime">WARN notice</span>}
+              </span>
+              {s.title && <span className="mt-0.5 block text-[15px] leading-snug">{s.title}</span>}
+              {s.date && <span className="mt-1 block font-mono text-xs text-muted">{formatDate(s.date)}</span>}
+            </span>
+            {s.href ? (
+              <ArrowUpRight size={18} className="shrink-0" aria-hidden="true" />
+            ) : (
+              <span className="shrink-0 font-mono text-xs text-muted">No link</span>
+            )}
+          </>
+        )
+        const cls = 'flex items-start gap-4 px-4 py-4 sm:px-5'
+        return (
+          <li key={s.key} className="border-b-2 border-ink last:border-b-0">
+            {s.href ? (
+              <a href={s.href} target="_blank" rel="noopener noreferrer" className={`${cls} transition-colors hover:bg-lime-tint`}>
+                {body}
+              </a>
+            ) : (
+              <div className={cls}>{body}</div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+// Compact block used on the company page.
 export default function LayoffEventBlock({
   event,
   companyName,
@@ -26,67 +72,25 @@ export default function LayoffEventBlock({
   companyName: string
   showHeadline?: boolean
 }) {
-  const sources = toDisplaySources(event.sources)
-
   return (
     <div>
       {showHeadline && (
         <>
-          <h3 className="text-2xl font-bold leading-snug tracking-tight text-brand-navy sm:text-3xl">
+          <p className="label">[ Announced ] {formatDate(eventDate(event), 'long')}</p>
+          <h3 className="mt-2 text-2xl font-bold leading-[1.1] tracking-display sm:text-[32px]">
             {layoffHeadline(companyName, event.employees_affected)}
           </h3>
-          <p className="mt-2 text-sm text-brand-navy/55">Announced {formatDate(eventDate(event), 'long')}</p>
         </>
       )}
+      {event.summary && <p className="mt-4 max-w-3xl text-[17px] leading-relaxed">{event.summary}</p>}
 
-      <h4 className="mt-6 text-xs font-semibold uppercase tracking-[0.14em] text-brand-navy/60">Relevant articles</h4>
-      {sources.length === 0 ? (
-        <p className="mt-3 text-sm italic text-brand-navy/55">No article links are available for this event yet.</p>
-      ) : (
-        <ul className="mt-3 space-y-2.5">
-          {sources.map((s) => {
-            const Icon = s.kind === 'warn' ? FileText : Newspaper
-            const row = (
-              <>
-                <span className="flex min-w-0 items-start gap-3">
-                  <span
-                    className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                      s.kind === 'warn' ? 'bg-brand-green text-brand-gold' : 'bg-brand-tan/40 text-brand-green'
-                    }`}
-                  >
-                    <Icon size={15} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-brand-navy">{s.label}</span>
-                    {s.title && <span className="block truncate text-sm text-brand-navy/65">{s.title}</span>}
-                  </span>
-                </span>
-                {s.href ? (
-                  <ExternalLink size={15} className="shrink-0 text-brand-green" />
-                ) : (
-                  <span className="shrink-0 text-xs text-brand-navy/45">Link unavailable</span>
-                )}
-              </>
-            )
-            const cls = 'flex items-center justify-between gap-4 rounded-lg border border-brand-tan/60 bg-white p-3.5 transition'
-            return (
-              <li key={s.key}>
-                {s.href ? (
-                  <a
-                    href={s.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`${cls} hover:border-brand-green/50 hover:shadow-card`}
-                  >
-                    {row}
-                  </a>
-                ) : (
-                  <div className={cls}>{row}</div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+      <p className="label mt-6 mb-3">[ Sources ]</p>
+      <SourceList event={event} />
+
+      {event.event_path && (
+        <Link href={event.event_path} className="btn-secondary mt-5">
+          Full record and next steps <ArrowRight size={16} />
+        </Link>
       )}
     </div>
   )

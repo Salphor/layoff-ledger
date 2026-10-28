@@ -1,22 +1,22 @@
-import { ArrowRight, Briefcase } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { JOBQUE_URL, SITE_NAME } from '@/lib/site'
 
 export default function JobQueCampaignCard() {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-brand-green-dark px-6 py-12 text-white shadow-lift sm:px-12">
-      <div className="bg-grid absolute inset-0" />
-      <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-gold/10 blur-3xl" />
-      <div className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
-        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl border border-brand-gold/30 bg-brand-gold/10">
-          <Briefcase className="text-brand-gold" size={26} />
-        </div>
-        <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">Affected by a recent layoff?</h3>
-        <p className="mt-4 text-base leading-relaxed text-white/70 sm:text-lg">
-          {SITE_NAME} exists to bring transparency to the labor market. If you are impacted by any of these events,
-          JobQue provides specialized tools to accelerate your next placement.
+    <div className="grid gap-6 border-2 border-ink bg-lime-tint p-6 sm:p-10 md:grid-cols-12 md:items-end">
+      <div className="md:col-span-8">
+        <p className="label">[ Affected by a layoff? ]</p>
+        <h2 className="mt-3 text-3xl font-bold leading-[1.05] tracking-display sm:text-[40px]">
+          Don&rsquo;t job-hunt alone.
+        </h2>
+        <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted">
+          {SITE_NAME} tracks layoffs so people can act fast. JobQueAi is a daily job-search companion that helps you find
+          and apply to the right companies next.
         </p>
-        <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary mt-8 !px-8 !py-3.5">
-          Discover JobQue <ArrowRight size={16} />
+      </div>
+      <div className="md:col-span-4 md:text-right">
+        <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary">
+          Start with JobQueAi <ArrowRight size={16} />
         </a>
       </div>
     </div>

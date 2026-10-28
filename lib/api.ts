@@ -1,6 +1,7 @@
+import { cache } from 'react';
 import { supabase } from './supabase/client';
-import { LayoffEvent, Company, Source } from './types';
-import { eventSortTime } from './site';
+import { LayoffEvent, Company, Source, DirectoryCompany } from './types';
+import { assignEventSlugs, eventHref, eventSortTime, slugDate } from './site';
 
 const PUBLIC_STATUSES = ['published', 'verified'];
 
@@ -10,14 +11,25 @@ const ID_CHUNK = 100;
 
 async function getCompaniesByIds(ids: string[]): Promise<Record<string, Company>> {
   const map: Record<string, Company> = {};
-  for (let i = 0; i < ids.length; i += ID_CHUNK) {
-    const chunk = ids.slice(i, i + ID_CHUNK);
-    const { data, error } = await supabase.from('companies').select('*').in('id', chunk);
-    if (error) {
-      console.error('[getCompaniesByIds] query failed for chunk starting at', i, error);
-      continue;
-    }
-    for (const c of (data || []) as Company[]) map[c.id] = c;
+  const starts: number[] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) starts.push(i);
+
+  // Up to 6 requests at a time (the A-Z directory can need dozens).
+  for (let g = 0; g < starts.length; g += 6) {
+    await Promise.all(
+      starts.slice(g, g + 6).map(async (i) => {
+        const chunk = ids.slice(i, i + ID_CHUNK);
+        const { data, error } = await supabase
+          .from('companies')
+          .select('*')
+          .in('id', chunk);
+        if (error) {
+          console.error('[getCompaniesByIds] query failed for chunk starting at', i, error);
+          return;
+        }
+        for (const c of (data || []) as Company[]) map[c.id] = c;
+      })
+    );
   }
   return map;
 }
@@ -55,10 +67,16 @@ export async function getLatestLayoffs(limit = 50): Promise<LayoffEvent[]> {
   const companyIds = Array.from(new Set(events.map(e => e.company_id).filter(Boolean)));
   const companiesMap = await getCompaniesByIds(companyIds);
 
-  return events.map(e => ({
-    ...e,
-    company: companiesMap[e.company_id] || null
-  })) as LayoffEvent[];
+  const slugs = await getEventSlugMap();
+
+  return events.map(e => {
+    const company = companiesMap[e.company_id] || null;
+    return {
+      ...e,
+      company,
+      event_path: eventHref(company, slugs[e.id]),
+    };
+  }) as LayoffEvent[];
 }
 
 export async function getCompanyBySlug(slug: string): Promise<Company | null> {
@@ -151,4 +169,84 @@ export async function getSiteStats() {
     eventsTracked: eventsCount || 0,
     employeesAffected
   };
+}
+
+// ---------------------------------------------------------------------------
+// Lightweight index of every public event (no summaries), used to build
+// event URLs and the A-Z company directory. Supabase returns at most 1,000
+// rows per request, so read it in pages.
+
+interface IndexRow {
+  id: string;
+  company_id: string;
+  date_announced: string | null;
+  notice_date: string | null;
+  created_at: string;
+  employees_affected: number | null;
+}
+
+const PAGE = 1000;
+
+export const getEventIndex = cache(async (): Promise<IndexRow[]> => {
+  const rows: IndexRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('layoff_events')
+      .select('id,company_id,date_announced,notice_date,created_at,employees_affected')
+      .in('status', PUBLIC_STATUSES)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) {
+      console.error('[getEventIndex] query failed at row', from, error);
+      break;
+    }
+    rows.push(...((data || []) as IndexRow[]));
+    if (!data || data.length < PAGE) break;
+  }
+  return rows;
+});
+
+// event id -> event slug ("october-2026"), computed per company.
+export const getEventSlugMap = cache(async (): Promise<Record<string, string>> => {
+  const byCompany = new Map<string, IndexRow[]>();
+  for (const r of await getEventIndex()) {
+    if (!r.company_id) continue;
+    const list = byCompany.get(r.company_id) || [];
+    list.push(r);
+    byCompany.set(r.company_id, list);
+  }
+  const out: Record<string, string> = {};
+  byCompany.forEach((list) => Object.assign(out, assignEventSlugs(list)));
+  return out;
+});
+
+// Every company with at least one public event, A-Z.
+export async function getCompanyDirectory(): Promise<DirectoryCompany[]> {
+  const stats = new Map<string, { events: number; latest: number; workers: number }>();
+  for (const r of await getEventIndex()) {
+    if (!r.company_id) continue;
+    const s = stats.get(r.company_id) || { events: 0, latest: 0, workers: 0 };
+    s.events += 1;
+    const t = slugDate(r).getTime();
+    if (!isNaN(t) && t > s.latest) s.latest = t;
+    s.workers += r.employees_affected && r.employees_affected > 0 ? r.employees_affected : 0;
+    stats.set(r.company_id, s);
+  }
+  if (stats.size === 0) return [];
+
+  const companies = await getCompaniesByIds(Array.from(stats.keys()));
+  const out: DirectoryCompany[] = [];
+  stats.forEach((s, id) => {
+    const c = companies[id];
+    if (!c?.slug || !c.canonical_name) return;
+    out.push({
+      id,
+      name: c.canonical_name,
+      slug: c.slug,
+      events: s.events,
+      latest: s.latest ? new Date(s.latest).toISOString() : null,
+      workers: s.workers,
+    });
+  });
+  return out.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true }));
 }

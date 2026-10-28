@@ -38,4 +38,15 @@ export interface LayoffEvent {
   created_at: string;
   company?: Company; // Joined data
   sources?: Source[]; // Joined data
+  event_path?: string; // /companies/<company>/<event-slug>, added by the API
+}
+
+// One row per company on the A-Z directory.
+export interface DirectoryCompany {
+  id: string;
+  name: string;
+  slug: string;
+  events: number;
+  latest: string | null; // ISO date of the newest public event
+  workers: number; // sum of disclosed worker counts
 }

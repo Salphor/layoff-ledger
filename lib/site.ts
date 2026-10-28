@@ -58,3 +58,91 @@ export function eventSortTime(e: {
 }): number {
   return new Date(e.date_announced || e.announcement_date || e.notice_date || e.created_at).getTime()
 }
+
+// ---------------------------------------------------------------------------
+// Per-event URLs: /companies/<company-slug>/<event-slug>
+//
+// The first layoff a company has in a given month gets "october-2026".
+// A later event in the same month gets the day too ("october-21-2026"), and a
+// second event on the same day gets "-2", "-3"... Events are numbered oldest
+// first, so an existing URL never changes when a newer event is added.
+
+const MONTHS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+]
+
+export interface SlugInput {
+  id: string
+  date_announced: string | null
+  notice_date: string | null
+  created_at: string
+}
+
+// The date the URL is built from. Uses only columns every event row has.
+export function slugDate(e: SlugInput): Date {
+  return new Date(e.date_announced || e.notice_date || e.created_at)
+}
+
+export function assignEventSlugs(events: SlugInput[]): Record<string, string> {
+  const sorted = [...events].sort((a, b) => {
+    const d = slugDate(a).getTime() - slugDate(b).getTime()
+    return d !== 0 ? d : a.id.localeCompare(b.id)
+  })
+  const used = new Set<string>()
+  const out: Record<string, string> = {}
+  for (const e of sorted) {
+    const d = slugDate(e)
+    if (isNaN(d.getTime())) {
+      out[e.id] = e.id
+      continue
+    }
+    const month = MONTHS[d.getUTCMonth()]
+    const year = d.getUTCFullYear()
+    let slug = `${month}-${year}`
+    if (used.has(slug)) slug = `${month}-${d.getUTCDate()}-${year}`
+    if (used.has(slug)) {
+      let n = 2
+      while (used.has(`${slug}-${n}`)) n++
+      slug = `${slug}-${n}`
+    }
+    used.add(slug)
+    out[e.id] = slug
+  }
+  return out
+}
+
+export function eventHref(
+  company: { slug?: string | null } | null | undefined,
+  eventSlug: string | null | undefined
+): string {
+  const base = companyHref(company)
+  if (!company?.slug || !eventSlug) return base
+  return `${base}/${encodeURIComponent(eventSlug)}`
+}
+
+// "October 2026"
+export function monthYear(value: string | null | undefined): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+// 2026-10-21 (Signal uses ISO dates in mono labels)
+export function isoDate(value: string | null | undefined): string {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return '—'
+  return d.toISOString().slice(0, 10)
+}
+
+export function workersCount(e: { employees_affected: number | null; employee_count_text?: string | null }): string | null {
+  if (e.employees_affected && e.employees_affected > 0) return e.employees_affected.toLocaleString('en-US')
+  if (e.employee_count_text && e.employee_count_text.trim()) return e.employee_count_text.trim()
+  return null
+}
+
+// Absolute site URL for canonical links, social previews and the sitemap.
+// Set NEXT_PUBLIC_SITE_URL in your hosting settings once you have a domain.
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')

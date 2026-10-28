@@ -2,50 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Signal: square corners, 2px black rules, one lime accent. */
+
 @layer base {
   html { scroll-behavior: smooth; }
   body {
-    @apply bg-brand-canvas text-brand-navy antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    @apply bg-bone text-ink antialiased;
   }
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-gold ring-offset-2;
+    @apply outline outline-2 outline-offset-2 outline-ink;
   }
-  ::selection { background: #CBA95D55; }
+  ::selection { background: #C6F432; color: #0A0A0A; }
 }
 
 @layer components {
-  .container-page { @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8; }
-  .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.14em] text-brand-green; }
-  .card { @apply rounded-xl border border-brand-tan/60 bg-white shadow-card; }
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-gold px-6 py-3 text-sm font-semibold text-brand-navy shadow-sm transition hover:bg-white;
+  .container-page { @apply mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-10; }
+
+  /* [ LABEL ] in mono caps */
+  .label { @apply font-mono text-xs font-bold uppercase tracking-[0.04em]; }
+
+  /* Bordered white surface */
+  .box { @apply border-2 border-ink bg-white; }
+
+  /* Lime marker behind a number or phrase */
+  .mark { @apply bg-lime px-[0.12em] text-ink; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+  .giant {
+    @apply font-bold leading-[0.9] tracking-giant;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(72px, 16vw, 160px);
   }
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10;
+
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 border-2 px-5 text-[15px] font-semibold transition-colors;
   }
-}
+  .btn-primary { @apply btn border-ink bg-ink text-lime hover:bg-[#2A2A2A]; }
+  .btn-secondary { @apply btn border-ink bg-white text-ink hover:bg-lime; }
+  /* On black bands */
+  .btn-lime { @apply btn border-lime bg-lime text-ink hover:bg-white hover:border-white; }
+  .btn-ghost { @apply btn border-white text-white hover:bg-white hover:text-ink; }
 
-/* Subtle engineering-grid texture for dark sections */
-.bg-grid {
-  background-image:
-    linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
-}
+  .link { @apply text-ultra underline decoration-1 underline-offset-2 hover:decoration-2; }
 
-/* Expanding ring animation (decorative) */
-@keyframes ring-pulse {
-  0%   { transform: scale(0.6); opacity: 0.7; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-.animate-ring { animation: ring-pulse 5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+  .pill { @apply inline-flex items-center border-2 border-ink px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.04em]; }
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-ring, .animate-pulse { animation: none; }
+  /* Full-width labelled row: [ LABEL ] | content */
+  .row-labelled { @apply grid gap-3 border-t-2 border-ink py-8 md:grid-cols-12 md:gap-6 md:py-10; }
+  .row-labelled > .row-label { @apply label md:col-span-3 lg:col-span-2; }
+  .row-labelled > .row-body { @apply min-w-0 md:col-span-9 lg:col-span-10; }
 }
 
 details > summary { list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
