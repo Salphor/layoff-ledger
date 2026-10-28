@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { getLatestLayoffs, getSiteStats } from '@/lib/api'
 import { companyHref, isoDate, SITE_NAME, workersCount } from '@/lib/site'
-import { JOLTS } from '@/lib/stats'
 import JobQueCampaignCard from './components/JobQueCampaignCard'
+import LaborMarket from './components/LaborMarket'
 
 export const revalidate = 3600 // Revalidate hourly
 
@@ -87,34 +87,8 @@ export default async function Home() {
         </Link>
       </section>
 
-      {/* National context */}
-      <section className="container-page pb-14">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="label">[ U.S. labor market / {JOLTS.period} ]</p>
-            <h2 className="mt-2 text-[32px] font-bold leading-none tracking-display">The national picture</h2>
-          </div>
-          <p className="font-mono text-xs text-muted">SOURCE: U.S. BUREAU OF LABOR STATISTICS</p>
-        </div>
-        {/* 2px black gaps between cells read as rules */}
-        <div className="grid gap-[2px] border-2 border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
-          {JOLTS.stats.map((s) => (
-            <div key={s.label} className="bg-surface p-5">
-              <p className="label text-muted">{s.label}</p>
-              <p className="mt-3 text-5xl font-bold leading-none tracking-display tabular-nums">{s.value}</p>
-              <p className="mt-3 text-sm text-muted">{s.note}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 max-w-3xl text-xs leading-relaxed text-muted">
-          Seasonally adjusted figures from the{' '}
-          <a href={JOLTS.sourceUrl} className="link" target="_blank" rel="noopener noreferrer">
-            BLS Job Openings and Labor Turnover Survey (JOLTS)
-          </a>
-          , released {JOLTS.released}. They cover all separations nationwide, not just the public layoff events tracked by{' '}
-          {SITE_NAME}.
-        </p>
-      </section>
+      {/* National context: live BLS figures with trend charts */}
+      <LaborMarket />
 
       {/* How it works */}
       <section id="how-it-works" className="container-page pb-14">
