@@ -149,6 +149,9 @@ class StateWarnAdapter:
             f"{no_company} without company, {no_date} without a date. Columns: {columns}"
         )
         # If nothing could be read at all, the column names have probably changed.
+        if kept and not any(k["metadata"]["notice_date"] for k in kept):
+            sample = {k: v for k, v in kept[0]["metadata"]["raw_row"].items() if k}
+            self.report[state] += f"  (no notice dates read; first row: {sample})"
         if no_company == len(rows) or no_date == len(rows):
             sample = {k: v for k, v in rows[0].items() if k}
             self.report[state] += f"  <-- CHECK: column names not recognised. First row: {sample}"

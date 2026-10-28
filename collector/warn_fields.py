@@ -62,7 +62,8 @@ COUNTY_KEYS = ["county name", "county"]
 DATE_FORMATS = (
     "%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
     "%m-%d-%Y", "%b %d, %Y", "%B %d, %Y", "%d-%b-%y", "%d-%b-%Y",
-    "%B %Y", "%b %Y", "%m/%Y", "%Y-%m",  # month-only dates (NJ) -> 1st of month
+    "%b %d %Y", "%B %d %Y", "%d %B %Y", "%m.%d.%Y",
+    "%B %Y", "%b %Y", "%b-%y", "%B-%y", "%m/%Y", "%Y-%m",  # month-only (NJ) -> 1st of month
 )
 
 
@@ -169,7 +170,18 @@ def normalize_warn_row(row: dict, state: str) -> dict:
     else:
         date_raw = None
 
+    # A "notice date" in the future can't be when notice was given; some states'
+    # single date column (SC, UT) is really the layoff date.
+    today = datetime.now().strftime("%Y-%m-%d")
+    notice = parse_date(date_raw)
+    effective = parse_date(effective_raw)
+    if notice and notice > today:
+        effective = effective or notice
+        notice = None
+
     place = city or _city_from_address(address)
+    if place:  # "Fort Belvoir VA" -> "Fort Belvoir"
+        place = re.sub(rf"[,\s]+{st}$", "", place.strip()).strip(" ,") or place
     if place:
         location = f"{place}, {st}"
     elif county:
@@ -185,8 +197,8 @@ def normalize_warn_row(row: dict, state: str) -> dict:
         # is built from this raw text, so changing it would re-import old notices.
         "company_raw": company_raw,
         "notice_date_raw": date_raw,
-        "notice_date": parse_date(date_raw),
-        "effective_date": parse_date(effective_raw),
+        "notice_date": notice,
+        "effective_date": effective,
         # Some states (GA, PA) list only the layoff date, not when notice was
         # given. That date is used for the duplicate check and the 45-day window.
         "key_date_raw": date_raw or effective_raw,
