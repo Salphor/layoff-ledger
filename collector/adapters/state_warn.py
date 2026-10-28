@@ -1,6 +1,9 @@
 import asyncio
 import csv
 import hashlib
+import os
+import time
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -10,8 +13,31 @@ from warn_fields import normalize_warn_row, parse_date
 
 # States we collect. Each one is a separate scraper in the warn-scraper library
 # (https://github.com/biglocalnews/warn-scraper), so one state failing never
-# stops the others.
+# stops the others. Override with the WARN_STATES environment variable:
+# "ca,ny,wa" for a list, or "all" for every state the library supports.
 DEFAULT_STATES = ["ca", "ny", "wa", "tx"]
+
+# Every state the library has a scraper for, except LA and MA, which need a
+# paid proxy service (Zyte) to work.
+ALL_STATES = [
+    "ak", "al", "az", "ca", "co", "ct", "dc", "de", "fl", "ga", "hi", "ia", "id",
+    "il", "in", "ks", "ky", "md", "me", "mi", "mo", "ms", "mt", "nd", "ne", "nj",
+    "nm", "ny", "oh", "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "va",
+    "vt", "wa", "wi",
+]
+
+# How many states are scraped at the same time.
+PARALLEL_STATES = 6
+
+
+def states_from_env(value):
+    """'all' -> ALL_STATES; 'ca, ny' -> ['ca', 'ny']; empty -> DEFAULT_STATES."""
+    value = (value or "").strip().lower()
+    if not value:
+        return list(DEFAULT_STATES)
+    if value == "all":
+        return list(ALL_STATES)
+    return [s.strip() for s in value.split(",") if s.strip()]
 
 # How far back a notice can be and still be picked up. States post notices days
 # or weeks after the notice date (California's spreadsheet is refreshed about
@@ -21,10 +47,21 @@ DEFAULT_MAX_DAYS_OLD = 45
 
 SCRAPE_TIMEOUT_SECONDS = 300
 
+# Texas: the library's scraper is refused by the Texas Workforce Commission
+# site ("Scraper isn't scraping"). As a fallback we fetch the same yearly Excel
+# files ourselves, looking like an ordinary browser.
+TX_PAGE = "https://www.twc.texas.gov/data-reports/warn-notice"
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 
 class StateWarnAdapter:
     def __init__(self, states=None, max_days_old=DEFAULT_MAX_DAYS_OLD):
-        self.states = states or DEFAULT_STATES
+        self.states = states or states_from_env(os.environ.get("WARN_STATES"))
         self.output_dir = Path("/tmp/warn_data")
         self.cache_dir = Path("/tmp/warn_cache")
         self.cutoff = (datetime.now() - timedelta(days=max_days_old)).strftime("%Y-%m-%d")
@@ -59,6 +96,56 @@ class StateWarnAdapter:
             print(f"[WARN {state.upper()}] scraper failed (exit {result.returncode}):\n{tail}", flush=True)
             return False
         return True
+
+    def _tx_direct(self) -> bool:
+        """Fallback for Texas: download this year's and last year's Excel lists directly."""
+        try:
+            import httpx
+            from openpyxl import load_workbook
+        except ImportError as e:
+            print(f"[WARN TX] fallback unavailable: {e}", flush=True)
+            return False
+        this_year = datetime.now().year
+        try:
+            with httpx.Client(headers=BROWSER_HEADERS, follow_redirects=True, timeout=60) as client:
+                page = client.get(TX_PAGE)
+                if page.status_code != 200:
+                    print(f"[WARN TX] fallback: listing page returned HTTP {page.status_code}", flush=True)
+                    return False
+                links = sorted(set(re.findall(
+                    r'href="(/sites/default/files/oei/docs/warn-act-listings-[^"]*?(\d{4})[^"]*?\.xlsx?)"',
+                    page.text, re.I)))
+                wanted = [href for href, year in links if int(year) >= this_year - 1]
+                if not wanted:
+                    print("[WARN TX] fallback: no spreadsheet links found on the page", flush=True)
+                    return False
+                rows, header = [], None
+                for href in wanted:
+                    r = client.get(f"https://www.twc.texas.gov{href}")
+                    if r.status_code != 200:
+                        print(f"[WARN TX] fallback: {href} returned HTTP {r.status_code}", flush=True)
+                        continue
+                    xlsx = self.cache_dir / "tx_direct.xlsx"
+                    xlsx.write_bytes(r.content)
+                    sheet = load_workbook(xlsx, read_only=True, data_only=True).worksheets[0]
+                    for i, row in enumerate(sheet.iter_rows(values_only=True)):
+                        if i == 0:
+                            header = header or [str(c or "").strip() for c in row]
+                            continue
+                        if row and row[0] is not None:
+                            rows.append(["" if c is None else str(c) for c in row])
+            if not header or not rows:
+                print("[WARN TX] fallback: spreadsheets had no rows", flush=True)
+                return False
+            with open(self.output_dir / "tx.csv", "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(header)
+                w.writerows(rows)
+            print(f"[WARN TX] fallback succeeded: {len(rows)} rows from {len(wanted)} file(s)", flush=True)
+            return True
+        except Exception as e:
+            print(f"[WARN TX] fallback failed: {e!r}", flush=True)
+            return False
 
     def _read_state(self, state):
         csv_file = self.output_dir / f"{state}.csv"
@@ -126,22 +213,31 @@ class StateWarnAdapter:
             self.report[state] += "  <-- CHECK: column names not recognised"
         return kept
 
-    async def fetch_latest(self):
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        results = []
-
-        for state in self.states:
+    async def _one_state(self, state, gate):
+        async with gate:
+            started = time.monotonic()
             try:
                 ok = await asyncio.to_thread(self._run_state_scrape, state)
+                if not ok and state == "tx":
+                    ok = await asyncio.to_thread(self._tx_direct)
                 items = self._read_state(state)
                 if not ok and state in self.report:
                     self.report[state] = "scraper failed; " + self.report[state]
-                results.extend(items)
             except Exception as e:
+                items = []
                 self.report[state] = f"error: {e!r}"
+            self.report[state] = f"[{time.monotonic() - started:.0f}s] " + self.report.get(state, "")
+            return items
 
-        print("WARN scrape summary:", flush=True)
+    async def fetch_latest(self):
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        gate = asyncio.Semaphore(PARALLEL_STATES)
+        batches = await asyncio.gather(*(self._one_state(s, gate) for s in self.states))
+        results = [item for batch in batches for item in batch]
+
+        working = sum(1 for s in self.states if "recent" in self.report.get(s, ""))
+        print(f"WARN scrape summary ({working} of {len(self.states)} states returned data):", flush=True)
         for state in self.states:
             print(f"  {state.upper()}: {self.report.get(state, 'not run')}", flush=True)
         return results

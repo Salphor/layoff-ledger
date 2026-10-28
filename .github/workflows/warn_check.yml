@@ -1,8 +1,8 @@
 name: WARN Dry Run (no database)
 
-# Runs automatically when this file or the WARN code changes on a branch other
-# than main, and can also be started by hand. It has NO database secrets, so it
-# cannot change any data.
+# Runs automatically when the WARN code changes on a branch other than main, and
+# can also be started by hand. It has NO database secrets, so it cannot change
+# any data. Pushes test every supported state; a manual run can pick states.
 on:
   push:
     branches-ignore: [main]
@@ -12,11 +12,16 @@ on:
       - 'collector/warn_check.py'
       - '.github/workflows/warn_check.yml'
   workflow_dispatch:
+    inputs:
+      states:
+        description: 'States to test: "all", or a list like "ca,ny,wa,tx"'
+        required: false
+        default: 'all'
 
 jobs:
   dry-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,4 +32,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r collector/requirements.txt
       - name: Scrape WARN notices (dry run)
+        env:
+          WARN_STATES: ${{ inputs.states || 'all' }}
         run: python collector/warn_check.py

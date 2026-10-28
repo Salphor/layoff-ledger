@@ -31,9 +31,11 @@ NOTICE_KEYS = ["notice date", "date of notice", "notice dated", "warn date", "no
 RECEIVED_KEYS = ["received date", "date received", "wfdd received date", "received"]
 EFFECTIVE_KEYS = [
     "effective date", "layoff start date", "layoff date", "start date",
-    "closure date", "separation date", "effective",
+    "layoff closure starts",  # NY: "Date Layoff/Closure Starts"
+    "closure date", "separation date", "effective", "starts",
 ]
-CITY_KEYS = ["city name", "city", "location", "address"]
+CITY_KEYS = ["city name", "city", "location"]  # TX CITY_NAME, CA city, WA Location
+ADDRESS_KEYS = ["impacted site address", "address"]  # CA, NY street addresses
 COUNTY_KEYS = ["county name", "county"]
 
 DATE_FORMATS = (
@@ -100,30 +102,67 @@ def clean_company(name):
     return name or None
 
 
+def _city_from_address(address):
+    """'5815 Owens Drive  Pleasanton CA 94588' -> 'Pleasanton'; 'x  New York, NY, 10003' -> 'New York'."""
+    if not address:
+        return None
+    parts = re.split(r"\s{2,}", address.strip())
+    if len(parts) < 2:
+        return None  # street and city run together; can't split reliably
+    tail = parts[-1]
+    tail = re.sub(r"[,\s]+\d{5}(?:-\d{4})?\s*$", "", tail)   # zip
+    tail = re.sub(r"[,\s]+[A-Z]{2}\s*$", "", tail)              # state
+    tail = tail.strip(" ,")
+    return tail if tail and not re.search(r"\d", tail) else None
+
+
+def _county(value):
+    if not value:
+        return None
+    value = re.sub(r"\s+", " ", value).strip()
+    return value if value.lower().endswith("county") else f"{value} County"
+
+
 def normalize_warn_row(row: dict, state: str) -> dict:
     """One WARN row -> consistent fields. Values are None when the state doesn't provide them."""
+    st = state.upper()
     company_raw = _find(row, COMPANY_KEYS, exclude=("address", "city", "county"))
     notice_raw = _find(row, NOTICE_KEYS, exclude=("received",))
     received_raw = _find(row, RECEIVED_KEYS)
-    effective_raw = _find(row, EFFECTIVE_KEYS, exclude=("notice", "received"))
+    effective_raw = _find(row, EFFECTIVE_KEYS, exclude=("notice", "received", "posted"))
     headcount_raw = _find(row, HEADCOUNT_KEYS, exclude=("date",))
-    city = _find(row, CITY_KEYS, exclude=("county",))
-    county = _find(row, COUNTY_KEYS)
+    city = _find(row, CITY_KEYS, exclude=("county", "address"))
+    address = _find(row, ADDRESS_KEYS)
+    county = _county(_find(row, COUNTY_KEYS))
 
-    notice = parse_date(notice_raw) or parse_date(received_raw)
-    location = ", ".join(x for x in [city, county and f"{county} County", state.upper()] if x)
+    # Use the notice date if that column really holds a date (WA also has a
+    # "Notice" column that may not), otherwise the date the state received it.
+    if parse_date(notice_raw):
+        date_raw = notice_raw
+    else:
+        date_raw = received_raw
+
+    place = city or _city_from_address(address)
+    if place:
+        location = f"{place}, {st}"
+    elif county:
+        location = f"{county}, {st}"
+    elif address:
+        location = address
+    else:
+        location = None
 
     return {
         "company": clean_company(company_raw),
         # Kept exactly as the state wrote it: the duplicate check (fingerprint)
-        # was built from this raw text, so changing it would re-import old notices.
+        # is built from this raw text, so changing it would re-import old notices.
         "company_raw": company_raw,
-        "notice_date_raw": notice_raw or received_raw,
-        "notice_date": notice,
+        "notice_date_raw": date_raw,
+        "notice_date": parse_date(date_raw),
         "effective_date": parse_date(effective_raw),
         "headcount": parse_headcount(headcount_raw),
-        "location": location or None,
-        "state": state.upper(),
+        "location": location,
+        "state": st,
     }
 
 
