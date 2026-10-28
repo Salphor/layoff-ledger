@@ -108,7 +108,11 @@ class StateWarnAdapter:
             if not fields["key_date"]:
                 no_date += 1
                 continue
-            if fields["key_date"] < self.cutoff:
+            # Keep notices filed recently, plus older ones whose layoff hasn't
+            # started yet (or only just did), for the "upcoming layoffs" view.
+            recent = fields["key_date"] >= self.cutoff
+            upcoming = bool(fields["effective_date"]) and fields["effective_date"] >= self.cutoff
+            if not (recent or upcoming):
                 old += 1
                 continue
 
@@ -145,7 +149,7 @@ class StateWarnAdapter:
             })
 
         self.report[state] = (
-            f"{len(rows)} rows, {len(kept)} recent (since {self.cutoff}); skipped {old} older, "
+            f"{len(rows)} rows, {len(kept)} recent or upcoming (since {self.cutoff}); skipped {old} older, "
             f"{no_company} without company, {no_date} without a date. Columns: {columns}"
         )
         # If nothing could be read at all, the column names have probably changed.

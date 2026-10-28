@@ -63,6 +63,7 @@ DATE_FORMATS = (
     "%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
     "%m-%d-%Y", "%b %d, %Y", "%B %d, %Y", "%d-%b-%y", "%d-%b-%Y",
     "%b %d %Y", "%B %d %Y", "%d %B %Y", "%m.%d.%Y",
+    "%Y%m%d",  # WI "20260708"
     "%B %Y", "%b %Y", "%b-%y", "%B-%y", "%m/%Y", "%Y-%m",  # month-only (NJ) -> 1st of month
 )
 
