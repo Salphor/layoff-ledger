@@ -152,22 +152,18 @@ export async function getCompanyEvents(companyId: string): Promise<LayoffEvent[]
 }
 
 export async function getSiteStats() {
-  const { count: eventsCount } = await supabase
-    .from('layoff_events')
-    .select('*', { count: 'exact', head: true })
-    .in('status', PUBLIC_STATUSES);
-
-  const { data } = await supabase
-    .from('layoff_events')
-    .select('employees_affected')
-    .in('status', PUBLIC_STATUSES)
-    .not('employees_affected', 'is', null);
-
-  const employeesAffected = data?.reduce((acc, curr) => acc + (curr.employees_affected || 0), 0) || 0;
+  // Supabase returns at most 1,000 rows per request, so summing worker counts
+  // from a single query undercounted once there were more events. The event
+  // index below is read in pages and already includes the counts.
+  const index = await getEventIndex();
+  const employeesAffected = index.reduce(
+    (acc, e) => acc + (e.employees_affected && e.employees_affected > 0 ? e.employees_affected : 0),
+    0
+  );
 
   return {
-    eventsTracked: eventsCount || 0,
-    employeesAffected
+    eventsTracked: index.length,
+    employeesAffected,
   };
 }
 

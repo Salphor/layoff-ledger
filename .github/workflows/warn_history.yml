@@ -1,0 +1,63 @@
+name: WARN History Import
+
+# One-time (or occasional) import of older WARN notices, run by hand from the
+# Actions tab. Safe to re-run: notices already saved are skipped, and if it
+# runs out of time it continues where it stopped on the next run.
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Import notices from this date on (YYYY-MM-DD)'
+        required: true
+        default: '2024-01-01'
+      states:
+        description: 'States to import (comma-separated)'
+        required: true
+        default: 'ak,al,az,ca,ct,de,ga,ia,in,ks,ky,me,mo,mt,ne,nj,ny,ok,or,pa,sc,sd,ut,va,vt,wa,wi'
+
+# Shares a queue with the hourly Event Processing Worker, so the two never
+# process the same notices at the same time.
+concurrency:
+  group: queue-processing-worker
+  cancel-in-progress: false
+
+jobs:
+  import-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340   # GitHub's limit is 360
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r collector/requirements.txt
+
+      - name: Save historical WARN notices
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          NODE_OPTIONS: '--no-deprecation'
+          SCAN_NEWS: '0'
+          SCAN_WARN: '1'
+          SOURCE_LIMIT: '0'          # only save; the next step processes them
+          RUN_BUDGET_SECONDS: '1800'
+          WARN_SINCE: ${{ inputs.since }}
+          WARN_STATES: ${{ inputs.states }}
+        run: |
+          python collector/run_scan.py
+
+      - name: Turn them into layoff events
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          NODE_OPTIONS: '--no-deprecation'
+          QUEUE_TIME_BUDGET_SECONDS: '18000'   # 5 hours, then stop cleanly
+          QUEUE_BATCH_SIZE: '500'
+        run: |
+          python collector/process_queue.py

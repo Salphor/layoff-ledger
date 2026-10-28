@@ -210,6 +210,22 @@ def normalize_warn_row(row: dict, state: str) -> dict:
     }
 
 
+def public_date(notice_date, effective_date):
+    """
+    The date a WARN record is listed under on the site. Normally the notice
+    date. States that publish only a layoff date (NJ, PA, GA) use that date
+    once it has passed, so years-old layoffs from the history import aren't
+    shown as new. A future-only date gives None: the record is then dated by
+    when we first saw it.
+    """
+    if notice_date:
+        return notice_date
+    today = datetime.now().strftime("%Y-%m-%d")
+    if effective_date and effective_date <= today:
+        return effective_date
+    return None
+
+
 def build_warn_payload(source: dict) -> dict:
     """
     extracted_json for a saved WARN source (a row of the `sources` table).
@@ -252,7 +268,7 @@ def build_warn_payload(source: dict) -> dict:
         "source_id": str(source["source_id"]),
         "company_name": company_name,
         "headcount": headcount,
-        "date_announced": notice_date,
+        "date_announced": public_date(notice_date, effective_date),
         "notice_date": notice_date,
         "effective_date": effective_date,
         "locations": [location] if location else [],

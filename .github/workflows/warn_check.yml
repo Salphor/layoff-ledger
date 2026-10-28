@@ -17,6 +17,10 @@ on:
         description: 'States to test: "all", or a list like "ca,ny,wa,tx"'
         required: false
         default: 'all'
+      since:
+        description: 'Optional: count notices from this date on (YYYY-MM-DD), e.g. to size a history import'
+        required: false
+        default: ''
 
 jobs:
   dry-run:
@@ -34,4 +38,5 @@ jobs:
       - name: Scrape WARN notices (dry run)
         env:
           WARN_STATES: ${{ inputs.states || 'all' }}
+          WARN_SINCE: ${{ inputs.since }}
         run: python collector/warn_check.py

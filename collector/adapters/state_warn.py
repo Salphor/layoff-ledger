@@ -8,7 +8,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from warn_fields import normalize_warn_row, parse_date
+from warn_fields import normalize_warn_row, parse_date, public_date
 
 # States we collect. Each one is a separate scraper in the warn-scraper library
 # (https://github.com/biglocalnews/warn-scraper), so one state failing never
@@ -53,7 +53,12 @@ class StateWarnAdapter:
         self.states = states or states_from_env(os.environ.get("WARN_STATES"))
         self.output_dir = Path("/tmp/warn_data")
         self.cache_dir = Path("/tmp/warn_cache")
-        self.cutoff = (datetime.now() - timedelta(days=max_days_old)).strftime("%Y-%m-%d")
+        # WARN_SINCE (YYYY-MM-DD) overrides the window; the history import uses it.
+        since = (os.environ.get("WARN_SINCE") or "").strip()
+        if since and parse_date(since):
+            self.cutoff = parse_date(since)
+        else:
+            self.cutoff = (datetime.now() - timedelta(days=max_days_old)).strftime("%Y-%m-%d")
         self.report = {}  # state -> summary line, printed at the end
 
     @staticmethod
@@ -132,8 +137,9 @@ class StateWarnAdapter:
                 "publisher": f"{state.upper()} State WARN Registry",
                 "url": f"https://warn-registry-{state}.local",
                 "title": f"WARN Notice: {fields['company']}",
-                # Date we first saw it if the state gives no notice date (GA, PA).
-                "published_at": fields["notice_date"] or datetime.now().strftime("%Y-%m-%d"),
+                # Notice date; else the layoff date once passed (NJ, PA, GA); else today.
+                "published_at": public_date(fields["notice_date"], fields["effective_date"])
+                or datetime.now().strftime("%Y-%m-%d"),
                 "fingerprint": self._fingerprint(fields["company_raw"], fields["key_date_raw"]),
                 "metadata": {
                     "company_name": fields["company"],

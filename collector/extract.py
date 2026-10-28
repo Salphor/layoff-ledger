@@ -3,7 +3,30 @@ from typing import List, Optional
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+
+class GeminiQuotaExhausted(Exception):
+    """The free-tier daily request limit is used up. Retrying only wastes time
+    (and, after midnight Pacific, tomorrow's quota), so callers should stop
+    sending requests for the rest of the run."""
+
+
+def _is_quota_error(exc) -> bool:
+    text = str(exc)
+    return "RESOURCE_EXHAUSTED" in text or " 429" in f" {text}"
+
+
+def _is_temporary_error(exc) -> bool:
+    """Worth one or two more tries: model overloaded (503), server error, timeout."""
+    if isinstance(exc, GeminiQuotaExhausted):
+        return False
+    text = str(exc)
+    return any(code in text for code in ("503", "UNAVAILABLE", "500", "INTERNAL", "DEADLINE", "imed out", "Timeout"))
+
+# Give up on a single request after this long, so one slow call can't eat the
+# whole run (some calls were taking 5+ minutes).
+REQUEST_TIMEOUT_MS = 90_000
 
 class LayoffExtraction(BaseModel):
     source_id: int = Field(description="The numeric ID corresponding to the Item ID provided in the prompt.")
@@ -23,13 +46,19 @@ class LayoffExtraction(BaseModel):
 class BatchExtractionResponse(BaseModel):
     extractions: List[LayoffExtraction] = Field(default_factory=list)
 
+# Each attempt counts against the 20-requests-per-day free quota, so retry only
+# temporary errors, at most 3 tries in total, and never a quota error.
 @retry(
-    wait=wait_exponential(multiplier=2, min=4, max=60),
-    stop=stop_after_attempt(5),
+    retry=retry_if_exception(_is_temporary_error),
+    wait=wait_exponential(multiplier=2, min=5, max=20),
+    stop=stop_after_attempt(3),
     reraise=True,
 )
 def extract_layoff_facts(batch_content: str) -> List[LayoffExtraction]:
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY"),
+        http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+    )
 
     prompt = f"""
     Analyze the following batch of articles regarding potential workforce reductions.
@@ -38,15 +67,20 @@ def extract_layoff_facts(batch_content: str) -> List[LayoffExtraction]:
     {batch_content}
     """
 
-    response = client.models.generate_content(
-        model='gemini-3.8-flash',
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=BatchExtractionResponse,
-            temperature=0.1,
-        ),
-    )
+    try:
+        response = client.models.generate_content(
+            model='gemini-3.8-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=BatchExtractionResponse,
+                temperature=0.1,
+            ),
+        )
+    except Exception as e:
+        if _is_quota_error(e):
+            raise GeminiQuotaExhausted(str(e)[:300]) from e
+        raise
     
     result = BatchExtractionResponse.model_validate_json(response.text)
     return result.extractions

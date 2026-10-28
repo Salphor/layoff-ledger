@@ -1,5 +1,8 @@
 name: 30-Minute Ingestion Scan
 
+# News only. WARN notices have their own workflow (warn_scan.yml), so this
+# job finishes well inside its 15-minute limit.
+
 on:
   schedule:
     # Runs every 30 minutes offset from the top/bottom of the hour (at :17 and :47)
@@ -36,5 +39,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           JINA_READER_API_KEY: ${{ secrets.JINA_READER_API_KEY }}
           NODE_OPTIONS: '--no-deprecation'
+          SCAN_NEWS: '1'
+          SCAN_WARN: '0'
+          GEMINI_BATCH_SIZE: '10'      # articles per Gemini request (20 requests/day free)
+          RUN_BUDGET_SECONDS: '660'    # stop starting new work after 11 minutes
         run: |
           python collector/run_scan.py

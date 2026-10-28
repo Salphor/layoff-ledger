@@ -10,7 +10,9 @@ from warn_fields import build_warn_payload
 # WARN notices need no Gemini calls, so large batches are cheap. Override with the
 # QUEUE_BATCH_SIZE environment variable if needed.
 BATCH_SIZE = int(os.environ.get("QUEUE_BATCH_SIZE") or 300)
-TIME_BUDGET_SECONDS = 12 * 60  # stop before the 15-minute workflow timeout
+# Stop before the workflow's time limit (12 min for the hourly worker; the
+# history import sets QUEUE_TIME_BUDGET_SECONDS much higher).
+TIME_BUDGET_SECONDS = int(os.environ.get("QUEUE_TIME_BUDGET_SECONDS") or 12 * 60)
 
 def get_db_connection():
     return psycopg2.connect(os.environ["SUPABASE_DATABASE_URL"])
@@ -69,55 +71,65 @@ def retry_stuck_candidates(conn, limit=50):
             conn.rollback()
 
 
+def fetch_batch(conn):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # Unprocessed WARN sources, newest notices first. (Sorting by id was
+        # effectively random, since ids are UUIDs.)
+        cur.execute(
+            """
+            SELECT s.id AS source_id, s.source_key, s.publisher, s.url, s.title, s.metadata
+            FROM sources s
+            LEFT JOIN candidates c ON s.id = c.source_id
+            WHERE c.id IS NULL
+              AND s.source_key LIKE 'warn-%%'   -- news articles are extracted by run_scan.py, never here
+            ORDER BY s.published_at DESC NULLS LAST
+            LIMIT %s
+            FOR UPDATE OF s SKIP LOCKED
+            """,
+            (BATCH_SIZE,)
+        )
+        return cur.fetchall()
+
+
 def run_queue_processor():
     conn = get_db_connection()
+    started = time.time()
+    total = 0
     try:
         retry_stuck_candidates(conn)
 
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Fetch un-extracted sources from backlog safely targeting table 's'
-            cur.execute(
-                """
-                SELECT s.id AS source_id, s.source_key, s.publisher, s.url, s.title, s.metadata
-                FROM sources s
-                LEFT JOIN candidates c ON s.id = c.source_id
-                WHERE c.id IS NULL
-                  AND s.source_key LIKE 'warn-%%'   -- news articles are extracted by run_scan.py, never here
-                ORDER BY s.id DESC
-                LIMIT %s
-                FOR UPDATE OF s SKIP LOCKED
-                """,
-                (BATCH_SIZE,)
-            )
-            sources = cur.fetchall()
-
-        if not sources:
-            print("Queue is empty. All sources are fully processed and categorized!", flush=True)
-            return
-
-        print(f"Queue Processor: Found {len(sources)} official WARN sources to categorize.", flush=True)
-
-        processed_count = 0
-        started = time.time()
-        for src in sources:
-            if time.time() - started > TIME_BUDGET_SECONDS:
-                print("Time budget reached; the rest will be picked up next run.", flush=True)
+        # Keep taking batches until the queue is empty or time runs out.
+        while time.time() - started < TIME_BUDGET_SECONDS:
+            sources = fetch_batch(conn)
+            if not sources:
+                print("Queue is empty. All sources are fully processed and categorized!", flush=True)
                 break
-            try:
-                # 1 & 2. Create candidate entry from source data
-                candidate_id = extract_and_save_candidate(conn, src)
-                
-                if candidate_id:
-                    # 3. Categorize candidate into companies and layoff_events
-                    process_candidate(candidate_id)
-                    processed_count += 1
 
-            except Exception as e:
-                print(f"Error processing source ID {src.get('source_id')}: {e}", flush=True)
-                conn.rollback()
+            print(f"Queue Processor: Found {len(sources)} official WARN sources to categorize.", flush=True)
+            processed_count = 0
+            for src in sources:
+                if time.time() - started > TIME_BUDGET_SECONDS:
+                    print("Time budget reached; the rest will be picked up next run.", flush=True)
+                    break
+                try:
+                    # 1 & 2. Create candidate entry from source data
+                    candidate_id = extract_and_save_candidate(conn, src)
+                    if candidate_id:
+                        # 3. Categorize candidate into companies and layoff_events
+                        process_candidate(candidate_id)
+                        processed_count += 1
+                except Exception as e:
+                    print(f"Error processing source ID {src.get('source_id')}: {e}", flush=True)
+                    conn.rollback()
 
-        print(f"Queue Processor completed: Successfully processed {processed_count}/{len(sources)} items.", flush=True)
+            conn.commit()  # release the batch's row locks
+            total += processed_count
+            print(f"  processed {processed_count}/{len(sources)} (total {total}, "
+                  f"{int(time.time() - started)}s elapsed)", flush=True)
+            if len(sources) < BATCH_SIZE:
+                break
 
+        print(f"Queue Processor completed: {total} sources processed.", flush=True)
     finally:
         conn.close()
 
