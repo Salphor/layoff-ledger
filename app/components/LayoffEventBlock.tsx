@@ -25,7 +25,7 @@ export function SourceList({ event }: { event: LayoffEvent }) {
     return <p className="text-sm text-muted">No article links are available for this event yet.</p>
   }
   return (
-    <ol className="border-2 border-ink bg-white">
+    <ol className="border-2 border-line bg-surface">
       {sources.map((s, i) => {
         const body = (
           <>
@@ -33,7 +33,7 @@ export function SourceList({ event }: { event: LayoffEvent }) {
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2">
                 <span className={`text-sm font-bold ${s.href ? 'text-ultra' : ''}`}>{s.label}</span>
-                {s.kind === 'warn' && <span className="pill bg-lime">WARN notice</span>}
+                {s.kind === 'warn' && <span className="pill bg-lime text-coal">WARN notice</span>}
               </span>
               {s.title && <span className="mt-0.5 block text-[15px] leading-snug">{s.title}</span>}
               {s.date && <span className="mt-1 block font-mono text-xs text-muted">{formatDate(s.date)}</span>}
@@ -47,7 +47,7 @@ export function SourceList({ event }: { event: LayoffEvent }) {
         )
         const cls = 'flex items-start gap-4 px-4 py-4 sm:px-5'
         return (
-          <li key={s.key} className="border-b-2 border-ink last:border-b-0">
+          <li key={s.key} className="border-b-2 border-line last:border-b-0">
             {s.href ? (
               <a href={s.href} target="_blank" rel="noopener noreferrer" className={`${cls} transition-colors hover:bg-lime-tint`}>
                 {body}

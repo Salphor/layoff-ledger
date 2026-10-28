@@ -5,7 +5,7 @@ import CouponCode from './CouponCode'
 // The JobQueAi "companion" offer shown under a layoff record.
 export default function JobQueCta() {
   return (
-    <div className="bg-ink p-6 text-white sm:p-8">
+    <div className="border-2 border-band bg-band p-6 text-white dark:border-line sm:p-8">
       <p className="label text-lime">[ Your next 20 days ]</p>
       <p className="mt-3 text-2xl font-bold leading-tight tracking-[-0.03em] sm:text-3xl">Were you affected by this layoff?</p>
       <p className="mt-3 max-w-2xl text-base leading-[2.2] text-grey">

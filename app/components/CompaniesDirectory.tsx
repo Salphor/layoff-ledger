@@ -42,7 +42,7 @@ export default function CompaniesDirectory({ companies }: { companies: Directory
 
   return (
     <div>
-      <div className="z-30 -mx-4 sm:sticky sm:top-[66px] border-b-2 border-ink bg-bone px-4 pb-3 pt-4 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+      <div className="z-30 -mx-4 sm:sticky sm:top-[74px] border-b-2 border-line bg-bone px-4 pb-3 pt-4 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
         <div className="relative">
           <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2" aria-hidden="true" />
           <input
@@ -51,13 +51,13 @@ export default function CompaniesDirectory({ companies }: { companies: Directory
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search a company"
             aria-label="Search companies"
-            className="h-12 w-full border-2 border-ink bg-white pl-12 pr-10 text-base placeholder:text-muted focus:bg-lime-tint focus:outline-none"
+            className="h-12 w-full border-2 border-line bg-surface pl-12 pr-10 text-base placeholder:text-muted focus:bg-lime-tint focus:outline-none"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-lime"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-lime hover:text-coal"
             >
               <X size={16} />
             </button>
@@ -69,7 +69,7 @@ export default function CompaniesDirectory({ companies }: { companies: Directory
               <a
                 key={l}
                 href={`#letter-${l === '#' ? 'num' : l}`}
-                className="flex h-8 min-w-[32px] items-center justify-center border-2 border-ink bg-white font-mono text-sm font-bold hover:bg-lime"
+                className="flex h-8 min-w-[32px] items-center justify-center border-2 border-line bg-surface font-mono text-sm font-bold hover:bg-lime hover:text-coal"
               >
                 {l}
               </a>
@@ -77,7 +77,7 @@ export default function CompaniesDirectory({ companies }: { companies: Directory
               <span
                 key={l}
                 aria-hidden="true"
-                className="flex h-8 min-w-[32px] items-center justify-center border-2 border-grey font-mono text-sm text-grey"
+                className="flex h-8 min-w-[32px] items-center justify-center border-2 border-muted/30 font-mono text-sm text-muted/50"
               >
                 {l}
               </span>
@@ -92,7 +92,7 @@ export default function CompaniesDirectory({ companies }: { companies: Directory
       </p>
 
       {total === 0 && (
-        <div className="mt-4 border-2 border-ink bg-white px-6 py-16 text-center">
+        <div className="mt-4 border-2 border-line bg-surface px-6 py-16 text-center">
           <p className="text-lg font-bold">No company matches “{query}”.</p>
           <p className="mt-1 text-sm text-muted">
             It may not have a recorded layoff yet. Check the <Link href="/layoffs" className="link">latest layoffs</Link>.
@@ -104,15 +104,15 @@ export default function CompaniesDirectory({ companies }: { companies: Directory
         {groups.map((g) => (
           <section key={g.letter} id={`letter-${g.letter === '#' ? 'num' : g.letter}`} className="scroll-mt-[200px]">
             <h2 className="mb-3 text-[56px] font-bold leading-none tracking-giant">{g.letter}</h2>
-            <ul className="border-2 border-ink bg-white">
-              <li className="hidden grid-cols-12 gap-6 border-b-2 border-ink px-5 py-2.5 md:grid" aria-hidden="true">
+            <ul className="border-2 border-line bg-surface">
+              <li className="hidden grid-cols-12 gap-6 border-b-2 border-line px-5 py-2.5 md:grid" aria-hidden="true">
                 <span className="label col-span-6">[ Company ]</span>
                 <span className="label col-span-2">[ Events ]</span>
                 <span className="label col-span-2">[ Workers ]</span>
                 <span className="label col-span-2">[ Latest ]</span>
               </li>
               {g.items.map((c) => (
-                <li key={c.id} className="border-b-2 border-ink last:border-b-0">
+                <li key={c.id} className="border-b-2 border-line last:border-b-0">
                   <Link
                     href={companyHref(c)}
                     className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-4 transition-colors hover:bg-lime-tint md:grid-cols-12 md:gap-6"

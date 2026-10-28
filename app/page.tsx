@@ -19,7 +19,7 @@ export default async function Home() {
   return (
     <div className="flex flex-col">
       {/* Number first */}
-      <section className="bg-ink text-white">
+      <section className="bg-band text-white">
         <div className="container-page py-14 sm:py-20">
           <p className="label text-lime">[ Workers in tracked U.S. layoffs ]</p>
           <p className="giant mt-4">
@@ -55,11 +55,11 @@ export default async function Home() {
             View all <ArrowRight size={14} />
           </Link>
         </div>
-        <ul className="border-2 border-ink bg-white">
+        <ul className="border-2 border-line bg-surface">
           {latestEvents.map((event) => {
             const count = workersCount(event)
             return (
-              <li key={event.id} className="border-b-2 border-ink last:border-b-0">
+              <li key={event.id} className="border-b-2 border-line last:border-b-0">
                 <Link
                   href={event.event_path || companyHref(event.company)}
                   className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-1 px-5 py-4 transition-colors hover:bg-lime-tint sm:grid-cols-[150px_minmax(0,1fr)_auto]"
@@ -97,9 +97,9 @@ export default async function Home() {
           <p className="font-mono text-xs text-muted">SOURCE: U.S. BUREAU OF LABOR STATISTICS</p>
         </div>
         {/* 2px black gaps between cells read as rules */}
-        <div className="grid gap-[2px] border-2 border-ink bg-ink sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-[2px] border-2 border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
           {JOLTS.stats.map((s) => (
-            <div key={s.label} className="bg-white p-5">
+            <div key={s.label} className="bg-surface p-5">
               <p className="label text-muted">{s.label}</p>
               <p className="mt-3 text-5xl font-bold leading-none tracking-display tabular-nums">{s.value}</p>
               <p className="mt-3 text-sm text-muted">{s.note}</p>
@@ -120,9 +120,9 @@ export default async function Home() {
       <section id="how-it-works" className="container-page pb-14">
         <p className="label">[ Method ]</p>
         <h2 className="mb-5 mt-2 text-[32px] font-bold leading-none tracking-display">Built on public records</h2>
-        <div className="border-t-2 border-ink">
+        <div className="border-t-2 border-line">
           {STEPS.map((s) => (
-            <div key={s.n} className="grid gap-2 border-b-2 border-ink py-6 md:grid-cols-12 md:gap-6">
+            <div key={s.n} className="grid gap-2 border-b-2 border-line py-6 md:grid-cols-12 md:gap-6">
               <p className="label md:col-span-2">[ {s.n} ]</p>
               <p className="text-2xl font-bold tracking-[-0.03em] md:col-span-3">{s.title}</p>
               <p className="text-[17px] leading-relaxed text-muted md:col-span-7">{s.body}</p>

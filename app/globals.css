@@ -2,9 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Signal: square corners, 2px black rules, one lime accent. */
+/* Signal: square corners, 2px rules, one lime accent.
+   Colors are RGB channels so Tailwind opacity modifiers (text-muted/50) work.
+   The "dark" class on <html> switches the theme (see ThemeToggle). */
 
 @layer base {
+  :root {
+    --ink: 10 10 10;          /* #0A0A0A text */
+    --line: 10 10 10;         /* #0A0A0A rules */
+    --bone: 242 242 239;      /* #F2F2EF page */
+    --surface: 255 255 255;   /* #FFFFFF cards */
+    --band: 10 10 10;         /* #0A0A0A bands */
+    --muted: 85 85 85;        /* #555555 */
+    --lime-tint: 238 249 200; /* #EEF9C8 */
+    --ultra: 47 47 228;       /* #2F2FE4 */
+    color-scheme: light;
+  }
+  /* Dark: near-black page, true-black bands, light text, softer grey rules.
+     Every text pairing passes WCAG AA (body text 4.5:1, rules 3:1). */
+  .dark {
+    --ink: 237 237 232;       /* #EDEDE8 text, 14.7:1 on surface */
+    --line: 110 110 104;      /* #6E6E68 rules, 3.4:1 on surface */
+    --bone: 18 18 18;         /* #121212 page */
+    --surface: 27 27 27;      /* #1B1B1B cards */
+    --band: 0 0 0;            /* #000000 bands */
+    --muted: 163 163 155;     /* #A3A39B, 6.8:1 on surface */
+    --lime-tint: 31 38 18;    /* #1F2612 olive-black */
+    --ultra: 154 156 255;     /* #9A9CFF, 7.0:1 on surface */
+    color-scheme: dark;
+  }
+
   html { scroll-behavior: smooth; }
   body {
     @apply bg-bone text-ink antialiased;
@@ -21,11 +48,11 @@
   /* [ LABEL ] in mono caps */
   .label { @apply font-mono text-xs font-bold uppercase tracking-[0.04em]; }
 
-  /* Bordered white surface */
-  .box { @apply border-2 border-ink bg-white; }
+  /* Bordered card surface */
+  .box { @apply border-2 border-line bg-surface; }
 
   /* Lime marker behind a number or phrase */
-  .mark { @apply bg-lime px-[0.12em] text-ink; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .mark { @apply bg-lime px-[0.12em] text-coal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 
   .giant {
     @apply font-bold leading-[0.9] tracking-giant;
@@ -36,18 +63,18 @@
   .btn {
     @apply inline-flex min-h-[44px] items-center justify-center gap-2 border-2 px-5 text-[15px] font-semibold transition-colors;
   }
-  .btn-primary { @apply btn border-ink bg-ink text-lime hover:bg-[#2A2A2A]; }
-  .btn-secondary { @apply btn border-ink bg-white text-ink hover:bg-lime; }
+  .btn-primary { @apply btn border-band bg-band text-lime hover:bg-[#2A2A2A] dark:border-line; }
+  .btn-secondary { @apply btn border-line bg-surface text-ink hover:bg-lime hover:text-coal; }
   /* On black bands */
-  .btn-lime { @apply btn border-lime bg-lime text-ink hover:bg-white hover:border-white; }
-  .btn-ghost { @apply btn border-white text-white hover:bg-white hover:text-ink; }
+  .btn-lime { @apply btn border-lime bg-lime text-coal hover:bg-white hover:border-white; }
+  .btn-ghost { @apply btn border-white text-white hover:bg-white hover:text-coal; }
 
   .link { @apply text-ultra underline decoration-1 underline-offset-2 hover:decoration-2; }
 
-  .pill { @apply inline-flex items-center border-2 border-ink px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.04em]; }
+  .pill { @apply inline-flex items-center border-2 border-line px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.04em]; }
 
   /* Full-width labelled row: [ LABEL ] | content */
-  .row-labelled { @apply grid gap-3 border-t-2 border-ink py-8 md:grid-cols-12 md:gap-6 md:py-10; }
+  .row-labelled { @apply grid gap-3 border-t-2 border-line py-8 md:grid-cols-12 md:gap-6 md:py-10; }
   .row-labelled > .row-label { @apply label md:col-span-3 lg:col-span-2; }
   .row-labelled > .row-body { @apply min-w-0 md:col-span-9 lg:col-span-10; }
 }

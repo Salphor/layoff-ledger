@@ -47,7 +47,7 @@ export default async function CompanyPage({
 
   return (
     <>
-      <section className="bg-ink text-white">
+      <section className="bg-band text-white">
         <div className="container-page py-10 sm:py-12">
           <nav className="label flex flex-wrap items-center gap-2 text-grey" aria-label="Breadcrumb">
             <Link href="/companies" className="hover:text-white">Companies</Link>
@@ -56,17 +56,17 @@ export default async function CompanyPage({
           </nav>
           <h1 className="mt-5 text-[40px] font-bold leading-[1] tracking-display sm:text-[64px]">{company.canonical_name}</h1>
           <dl className="mt-8 grid max-w-3xl grid-cols-2 gap-[2px] border-2 border-white/30 bg-white/30 sm:grid-cols-3">
-            <div className="bg-ink p-4">
+            <div className="bg-band p-4">
               <dt className="label text-grey">[ Events ]</dt>
               <dd className="mt-2 text-4xl font-bold leading-none tracking-display tabular-nums">{events.length}</dd>
             </div>
-            <div className="bg-ink p-4">
+            <div className="bg-band p-4">
               <dt className="label text-grey">[ Workers ]</dt>
               <dd className="mt-2 text-4xl font-bold leading-none tracking-display tabular-nums">
                 {totalWorkers ? <span className="mark">{totalWorkers.toLocaleString('en-US')}</span> : '—'}
               </dd>
             </div>
-            <div className="col-span-2 bg-ink p-4 sm:col-span-1">
+            <div className="col-span-2 bg-band p-4 sm:col-span-1">
               <dt className="label text-grey">[ Latest ]</dt>
               <dd className="mt-3 font-mono text-lg">{isoDate(eventDate(latest))}</dd>
             </div>
@@ -91,13 +91,13 @@ export default async function CompanyPage({
             {past.length === 0 ? (
               <p className="text-[17px] text-muted">No historical layoff events tracked</p>
             ) : (
-              <div className="border-2 border-ink bg-white">
+              <div className="border-2 border-line bg-surface">
                 {past.map((evt) => (
                   <details
                     key={evt.id}
                     id={`event-${evt.id}`}
                     open={openEventId === evt.id}
-                    className="group border-b-2 border-ink last:border-b-0"
+                    className="group border-b-2 border-line last:border-b-0"
                   >
                     <summary className="flex cursor-pointer items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-lime-tint">
                       <span className="min-w-0">
@@ -108,7 +108,7 @@ export default async function CompanyPage({
                       </span>
                       <ChevronDown size={20} className="shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
                     </summary>
-                    <div className="border-t-2 border-ink bg-bone p-5 sm:p-6">
+                    <div className="border-t-2 border-line bg-bone p-5 sm:p-6">
                       <p className="label text-muted">[ Announced ] {formatDate(eventDate(evt), 'long')}</p>
                       <LayoffEventBlock event={evt} companyName={company.canonical_name} showHeadline={false} />
                     </div>

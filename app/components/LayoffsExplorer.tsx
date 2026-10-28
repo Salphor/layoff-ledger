@@ -36,19 +36,19 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
             onChange={(e) => { setQuery(e.target.value); setVisible(PAGE_SIZE) }}
             placeholder="Search company, location or keyword"
             aria-label="Search layoffs"
-            className="h-12 w-full border-2 border-ink bg-white pl-12 pr-10 text-base placeholder:text-muted focus:bg-lime-tint focus:outline-none"
+            className="h-12 w-full border-2 border-line bg-surface pl-12 pr-10 text-base placeholder:text-muted focus:bg-lime-tint focus:outline-none"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-lime"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-lime hover:text-coal"
             >
               <X size={16} />
             </button>
           )}
         </div>
-        <label className="flex h-12 cursor-pointer select-none items-center gap-2 border-2 border-ink bg-white px-4 text-sm font-semibold hover:bg-lime-tint">
+        <label className="flex h-12 cursor-pointer select-none items-center gap-2 border-2 border-line bg-surface px-4 text-sm font-semibold hover:bg-lime-tint">
           <input
             type="checkbox"
             checked={onlyCounts}
@@ -63,8 +63,8 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
         Showing {shown.length.toLocaleString()} of {filtered.length.toLocaleString()} records
       </p>
 
-      <div className="border-2 border-ink bg-white">
-        <div className="hidden grid-cols-12 gap-6 border-b-2 border-ink px-5 py-3 md:grid">
+      <div className="border-2 border-line bg-surface">
+        <div className="hidden grid-cols-12 gap-6 border-b-2 border-line px-5 py-3 md:grid">
           <div className="label col-span-2">[ Workers ]</div>
           <div className="label col-span-3">[ Company ]</div>
           <div className="label col-span-5">[ Summary ]</div>
@@ -84,7 +84,7 @@ export default function LayoffsExplorer({ events }: { events: LayoffEvent[] }) {
             const href = event.event_path || companyHref(event.company)
             const places = asStringList(event.locations)
             return (
-              <li key={event.id} className="border-b-2 border-ink last:border-b-0">
+              <li key={event.id} className="border-b-2 border-line last:border-b-0">
                 <Link
                   href={href}
                   aria-disabled={!event.company}

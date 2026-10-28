@@ -14,7 +14,7 @@ export default async function CompaniesPage() {
 
   return (
     <>
-      <section className="bg-ink text-white">
+      <section className="bg-band text-white">
         <div className="container-page py-12 sm:py-14">
           <p className="label text-lime">[ Companies A–Z ]</p>
           <p className="mt-3 text-[72px] font-bold leading-[0.9] tracking-giant tabular-nums sm:text-[120px]">

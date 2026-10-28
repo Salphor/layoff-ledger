@@ -88,11 +88,11 @@ export default function NextSteps({ states = [] }: { states?: string[] }) {
   ]
 
   return (
-    <div className="border-2 border-ink bg-lime-tint p-4 sm:p-6">
+    <div className="border-2 border-line bg-lime-tint p-4 sm:p-6">
       <ol className="space-y-3">
         {steps.map((s, i) => (
-          <li key={s.title} className="grid grid-cols-[36px_minmax(0,1fr)] gap-x-4 border-2 border-ink bg-white p-4 sm:p-5">
-            <span className="flex h-9 w-9 items-center justify-center bg-ink font-mono text-sm font-bold text-lime">
+          <li key={s.title} className="grid grid-cols-[36px_minmax(0,1fr)] gap-x-4 border-2 border-line bg-surface p-4 sm:p-5">
+            <span className="flex h-9 w-9 items-center justify-center bg-band font-mono text-sm font-bold text-lime">
               {i + 1}
             </span>
             <div>

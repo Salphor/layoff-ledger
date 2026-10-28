@@ -132,7 +132,7 @@ export default async function LayoffEventPage({ params }: { params: Params }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
 
       {/* Number first */}
-      <section className="bg-ink text-white">
+      <section className="bg-band text-white">
         <div className="container-page py-10 sm:py-14">
           <nav className="label flex flex-wrap items-center gap-2 text-grey" aria-label="Breadcrumb">
             <Link href="/companies" className="hover:text-white">Companies</Link>
@@ -167,7 +167,7 @@ export default async function LayoffEventPage({ params }: { params: Params }) {
               <p className="mt-3 text-lg text-grey">{headline}.</p>
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <span className="pill border-white font-mono text-white">Announced {isoDate(announced)}</span>
-                {hasWarn && <span className="pill border-lime bg-lime">WARN notice</span>}
+                {hasWarn && <span className="pill border-lime bg-lime text-coal">WARN notice</span>}
                 {event.status === 'verified' && <span className="pill border-lime text-lime">Verified</span>}
                 <span className="pill border-white text-white">
                   {displaySources.length} {displaySources.length === 1 ? 'source' : 'sources'}
@@ -193,9 +193,9 @@ export default async function LayoffEventPage({ params }: { params: Params }) {
 
         <section className="row-labelled">
           <h2 className="row-label">[ Facts ]</h2>
-          <dl className="row-body grid border-l-2 border-t-2 border-ink sm:grid-cols-2 lg:grid-cols-3">
+          <dl className="row-body grid border-l-2 border-t-2 border-line sm:grid-cols-2 lg:grid-cols-3">
             {facts.map((f) => (
-              <div key={f.label} className="border-b-2 border-r-2 border-ink bg-white p-4 sm:p-5">
+              <div key={f.label} className="border-b-2 border-r-2 border-line bg-surface p-4 sm:p-5">
                 <dt className="label text-muted">{f.label}</dt>
                 <dd className={`mt-2 text-lg font-bold leading-snug ${f.empty ? 'font-medium text-muted' : ''}`}>{f.value}</dd>
               </div>
@@ -228,17 +228,17 @@ export default async function LayoffEventPage({ params }: { params: Params }) {
         <section className="row-labelled mb-16">
           <h2 className="row-label">[ {name} history ]</h2>
           <div className="row-body">
-            <ul className="border-2 border-ink bg-white">
+            <ul className="border-2 border-line bg-surface">
               {events.map((e) => {
                 const current = e.id === event.id
                 const c = workersCount(e)
                 return (
-                  <li key={e.id} className="border-b-2 border-ink last:border-b-0">
+                  <li key={e.id} className="border-b-2 border-line last:border-b-0">
                     <Link
                       href={e.event_path!}
                       aria-current={current ? 'page' : undefined}
                       className={`group grid grid-cols-[110px_minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition-colors ${
-                        current ? 'bg-lime' : 'hover:bg-lime-tint'
+                        current ? 'bg-lime text-coal' : 'hover:bg-lime-tint'
                       }`}
                     >
                       <span className="font-mono text-sm">{isoDate(eventDate(e))}</span>

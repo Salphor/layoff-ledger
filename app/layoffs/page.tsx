@@ -15,7 +15,7 @@ export default async function LatestLayoffsPage() {
 
   return (
     <>
-      <section className="bg-ink text-white">
+      <section className="bg-band text-white">
         <div className="container-page py-12 sm:py-14">
           <p className="label text-lime">[ Event database ]</p>
           <h1 className="mt-3 text-[44px] font-bold leading-none tracking-display sm:text-6xl">Latest layoffs</h1>

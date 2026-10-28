@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Space_Grotesk, Space_Mono } from 'next/font/google'
 import RadarMark from '@/app/components/RadarMark'
+import ThemeToggle, { THEME_SCRIPT } from '@/app/components/ThemeToggle'
 import { JOBQUE_URL, SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site'
 
 const grotesk = Space_Grotesk({
@@ -28,26 +29,31 @@ const NAV = [
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${grotesk.variable} ${mono.variable}`}>
+    // suppressHydrationWarning: THEME_SCRIPT adds the "dark" class before React loads.
+    <html lang="en" className={`${grotesk.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="flex min-h-screen flex-col font-sans">
-        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-lime focus:px-3 focus:py-2">
+        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-lime focus:text-coal focus:px-3 focus:py-2">
           Skip to content
         </a>
-        <header className="sticky top-0 z-40 border-b-2 border-ink bg-white">
-          <div className="container-page flex min-h-[64px] flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
+        <header className="sticky top-0 z-40 border-b-2 border-line bg-surface">
+          <div className="container-page flex min-h-[72px] flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
             <Link href="/" className="flex items-center gap-3">
-              <RadarMark />
-              <span className="text-lg font-bold tracking-[-0.03em]">{SITE_NAME}</span>
+              <RadarMark className="h-9 w-9" />
+              <span className="text-xl font-bold tracking-[-0.03em]">{SITE_NAME}</span>
             </Link>
             {/* sm:ml-auto pushes the menu right, next to the JobQueAi button */}
             <nav className="order-3 flex w-full items-center gap-6 sm:order-none sm:ml-auto sm:w-auto" aria-label="Main">
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="label py-1 hover:underline hover:decoration-2 hover:underline-offset-4">
+                <Link key={n.href} href={n.href} className="label py-1 !text-sm hover:underline hover:decoration-2 hover:underline-offset-4">
                   {n.label}
                 </Link>
               ))}
+              <ThemeToggle className="ml-auto sm:ml-0" />
             </nav>
-            <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary !min-h-[40px] !px-4 text-sm">
+            <a href={JOBQUE_URL} target="_blank" rel="noopener noreferrer" className="btn-primary !min-h-[44px] !px-5">
               JobQueAi
             </a>
           </div>
@@ -55,7 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
         <main id="main" className="flex-1">{children}</main>
 
-        <footer className="bg-ink text-white">
+        <footer className="border-t-2 border-band bg-band text-white dark:border-line">
           <div className="container-page grid gap-10 py-14 md:grid-cols-12">
             <div className="md:col-span-5">
               <div className="flex items-center gap-3">

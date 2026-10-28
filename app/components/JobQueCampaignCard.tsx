@@ -3,7 +3,7 @@ import { JOBQUE_URL, SITE_NAME } from '@/lib/site'
 
 export default function JobQueCampaignCard() {
   return (
-    <div className="grid gap-6 border-2 border-ink bg-lime-tint p-6 sm:p-10 md:grid-cols-12 md:items-end">
+    <div className="grid gap-6 border-2 border-line bg-lime-tint p-6 sm:p-10 md:grid-cols-12 md:items-end">
       <div className="md:col-span-8">
         <p className="label">[ Affected by a layoff? ]</p>
         <h2 className="mt-3 text-3xl font-bold leading-[1.05] tracking-display sm:text-[40px]">

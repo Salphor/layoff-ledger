@@ -21,7 +21,7 @@ export default function CouponCode({ code }: { code: string }) {
       type="button"
       onClick={copy}
       aria-label={`Copy promo code ${code}`}
-      className="inline-flex items-center gap-2 border-2 border-dashed border-lime px-3 py-1 font-mono text-sm font-bold uppercase tracking-wide text-lime transition-colors hover:bg-lime hover:text-ink"
+      className="inline-flex items-center gap-2 border-2 border-dashed border-lime px-3 py-1 font-mono text-sm font-bold uppercase tracking-wide text-lime transition-colors hover:bg-lime hover:text-coal"
     >
       {code}
       {copied ? <Check size={14} /> : <Copy size={14} />}

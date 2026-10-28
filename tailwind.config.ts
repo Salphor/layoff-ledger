@@ -3,6 +3,7 @@ import type { Config } from 'tailwindcss'
 // Signal design system (LayoffLedger style guide, direction G).
 // Black, white and one electric lime. Square corners, 2px black rules.
 const config: Config = {
+  darkMode: 'class',
   content: [
     './app/*.{js,ts,jsx,tsx,mdx}',
     './app/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -11,14 +12,20 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Colors are CSS variables (set in app/globals.css) so the same class
+      // works in light and dark mode.
       colors: {
-        ink: '#0A0A0A', // text, rules, buttons, bands
-        muted: '#555555', // secondary text (7.5:1 on white)
-        bone: '#F2F2EF', // page background
-        lime: '#C6F432', // button text on black, marker behind numbers. Never text on white.
-        'lime-tint': '#EEF9C8', // "what to do next" block
-        ultra: '#2F2FE4', // links and source names only
-        grey: '#BDBDB6', // secondary text on black
+        ink: 'rgb(var(--ink) / <alpha-value>)', // text (flips in dark mode)
+        line: 'rgb(var(--line) / <alpha-value>)', // 2px rules and borders
+        bone: 'rgb(var(--bone) / <alpha-value>)', // page background
+        surface: 'rgb(var(--surface) / <alpha-value>)', // cards, tables, inputs
+        band: 'rgb(var(--band) / <alpha-value>)', // black bands, footer, dark buttons
+        muted: 'rgb(var(--muted) / <alpha-value>)', // secondary text
+        'lime-tint': 'rgb(var(--lime-tint) / <alpha-value>)', // "what to do next", row hover
+        ultra: 'rgb(var(--ultra) / <alpha-value>)', // links and source names
+        lime: '#C6F432', // same in both modes. Never text on a light background.
+        coal: '#0A0A0A', // text on lime, in both modes
+        grey: '#BDBDB6', // secondary text on black bands
       },
       fontFamily: {
         sans: ['var(--font-grotesk)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
