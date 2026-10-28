@@ -9,3 +9,5 @@ pyyaml>=6.0.1
 python-dotenv>=1.0.1
 warn-scraper>=1.2.91
 tenacity>=8.2.0
+# Needed by the KY and MI WARN scrapers (not installed by warn-scraper itself)
+pyquery>=2.0.0

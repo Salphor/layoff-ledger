@@ -9,6 +9,7 @@ from adapters.google_news_rss import GoogleNewsAdapter
 from adapters.state_warn import StateWarnAdapter
 from extract import extract_layoff_facts
 from match import process_candidate
+from warn_fields import build_warn_payload
 
 def pre_filter_candidates(candidates):
     keywords = [
@@ -54,7 +55,7 @@ async def run_pipeline():
     news_items = pre_filter_candidates(raw_news_items)
 
     print("Fetching State WARN databases...", flush=True)
-    warn_adapter = StateWarnAdapter(max_days_old=2)
+    warn_adapter = StateWarnAdapter()  # CA, NY, WA, TX; last 45 days (see adapters/state_warn.py)
     warn_items = await warn_adapter.fetch_latest()
 
     all_incoming_items = news_items + warn_items
@@ -133,27 +134,8 @@ async def run_pipeline():
         print(f"Processing {len(structured_items)} structured WARN notices...", flush=True)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             for item in structured_items:
-                meta = item.get("metadata") or {}
-                raw_row = meta.get("raw_row", {})
-                state = meta.get("state", "US").upper()
-                
-                company_name = raw_row.get("company") or raw_row.get("company_name") or item["title"].replace("WARN Notice: ", "")
-                headcount = int(raw_row.get("employees", 0)) if str(raw_row.get("employees", "")).isdigit() else None
-                notice_date = meta.get("notice_date")
-
-                summary_text = f"Official {state} State WARN Notice filed by {company_name}."
-                if headcount:
-                    summary_text += f" Affects {headcount} workers."
-
-                extracted_data = {
-                    "source_id": str(item["source_id"]),
-                    "company_name": company_name,
-                    "headcount": headcount,
-                    "date_announced": notice_date,
-                    "is_layoff": True,
-                    "source_type": "warn_database",
-                    "summary": summary_text
-                }
+                # Same field reading as process_queue.py (see warn_fields.py).
+                extracted_data = build_warn_payload(item)
 
                 cur.execute(
                     """

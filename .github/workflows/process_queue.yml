@@ -1,8 +1,12 @@
 name: Event Processing Worker
 
+# Turns saved WARN notices into layoff events. Fully rule-based (no Gemini):
+# news articles are handled by the 30-minute scan, WARN notices are saved by
+# the WARN Notice Scan (warn_scan.yml) and processed here.
+
 on:
   schedule:
-    # Runs once every hour at minute 32 (offset from main scan at :17 and :47)
+    # Every hour at minute 32 (offset from the news scan at :17 and :47)
     - cron: '32 * * * *'
   workflow_dispatch: # Allows manual execution whenever needed
 
@@ -32,7 +36,6 @@ jobs:
       - name: Process Backlog Queue
         env:
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NODE_OPTIONS: '--no-deprecation'
         run: |
           python collector/process_queue.py
