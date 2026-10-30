@@ -1,0 +1,35 @@
+# Parent groups: employers that file WARN notices under many names.
+#
+# Each group lists the name the site shows ("parent") and patterns matched
+# against the cleaned company name (case-insensitive regular expressions).
+# Whatever follows the match becomes the event's site, e.g.
+#   "Adventist Health Bakersfield" -> company "Adventist Health", site "Bakersfield".
+# End a pattern with .*$ to group without keeping the rest as a site.
+#
+# Most spellings don't need an entry here: "AbbVie" / "AbbVie Inc.",
+# "Air Wisconsin Airlines LLC (MKE)" and "(131) San Diego LGBT Community Center"
+# are matched automatically. Add a group only when the names really differ.
+# Be careful with short prefixes: "Acme", "Acme Brick Co" and "Acme Markets"
+# are three different companies.
+
+groups:
+  - parent: Adventist Health
+    match: ['^adventist health\b']
+
+  - parent: Amazon
+    match: ['^amazon(\.com)?\b.*$']
+
+  - parent: Unitek Learning Education Group
+    match: ['^(\d+\s+)?unitek learning\b.*$']
+
+  - parent: 80 Acres Farms
+    match: ['^80 acres\b.*$']
+
+  - parent: Accelerate360 Distribution
+    match: ['^accelerate\s?360\b.*$']
+
+  - parent: ABM Industries
+    match: ['^abm\b.*$']
+
+  - parent: Conduent
+    match: ['^conduent\b.*$']

@@ -179,6 +179,7 @@ interface IndexRow {
   notice_date: string | null;
   created_at: string;
   employees_affected: number | null;
+  locations: string[] | string | null;
 }
 
 const PAGE = 1000;
@@ -188,7 +189,7 @@ export const getEventIndex = cache(async (): Promise<IndexRow[]> => {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('layoff_events')
-      .select('id,company_id,date_announced,notice_date,created_at,employees_affected')
+      .select('id,company_id,date_announced,notice_date,created_at,employees_affected,locations')
       .in('status', PUBLIC_STATUSES)
       .order('id', { ascending: true })
       .range(from, from + PAGE - 1);

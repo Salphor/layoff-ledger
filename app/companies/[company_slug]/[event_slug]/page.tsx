@@ -10,6 +10,7 @@ import ShareButtons from '@/app/components/ShareButtons'
 import {
   asStringList,
   assignEventSlugs,
+  eventForOldSlug,
   companyHref,
   eventHref,
   formatDate,
@@ -51,12 +52,19 @@ async function resolve(companySlug: string, eventSlug: string): Promise<Resolved
   // Old links that used the event id: send them to the readable URL.
   const byId = events.find((e) => e.id === wanted)
   if (byId) permanentRedirect(byId.event_path!)
+
+  // Old date-only links (before a company had several events that month).
+  const oldId = eventForOldSlug(raw, slugs, wanted)
+  const moved = oldId ? events.find((e) => e.id === oldId) : null
+  if (moved) permanentRedirect(moved.event_path!)
   return null
 }
 
 function title(r: Resolved): string {
   const when = monthYear(eventDate(r.event))
-  return `${r.company.canonical_name} layoffs${when ? `, ${when}` : ''}`
+  const places = asStringList(r.event.locations)
+  const where = places.length === 1 ? ` in ${places[0]}` : ''
+  return `${r.company.canonical_name} layoffs${where}${when ? `, ${when}` : ''}`
 }
 
 function description(r: Resolved): string {

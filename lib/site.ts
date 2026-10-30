@@ -62,10 +62,10 @@ export function eventSortTime(e: {
 // ---------------------------------------------------------------------------
 // Per-event URLs: /companies/<company-slug>/<event-slug>
 //
-// The first layoff a company has in a given month gets "october-2026".
-// A later event in the same month gets the day too ("october-21-2026"), and a
-// second event on the same day gets "-2", "-3"... Events are numbered oldest
-// first, so an existing URL never changes when a newer event is added.
+// A company's only layoff in a month gets "october-2026". When it has several
+// in one month (often different locations), each gets the day and the place:
+// "june-25-2026-kern-county-ca". Two that still match get "-2", "-3"...
+// Old month-only links are redirected by the event page (eventForOldSlug).
 
 const MONTHS = [
   'january', 'february', 'march', 'april', 'may', 'june',
@@ -77,6 +77,7 @@ export interface SlugInput {
   date_announced: string | null
   notice_date: string | null
   created_at: string
+  locations?: string[] | string | null
 }
 
 // The date the URL is built from. Uses only columns every event row has.
@@ -84,11 +85,24 @@ export function slugDate(e: SlugInput): Date {
   return new Date(e.date_announced || e.notice_date || e.created_at)
 }
 
+// "Kern County, CA" -> "kern-county-ca"
+function placeSlug(e: SlugInput): string {
+  const first = asStringList(e.locations)[0] || ''
+  return first.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+}
+
 export function assignEventSlugs(events: SlugInput[]): Record<string, string> {
   const sorted = [...events].sort((a, b) => {
     const d = slugDate(a).getTime() - slugDate(b).getTime()
     return d !== 0 ? d : a.id.localeCompare(b.id)
   })
+  const monthKey = (d: Date) => `${d.getUTCFullYear()}-${d.getUTCMonth()}`
+  const perMonth = new Map<string, number>()
+  for (const e of sorted) {
+    const d = slugDate(e)
+    if (!isNaN(d.getTime())) perMonth.set(monthKey(d), (perMonth.get(monthKey(d)) || 0) + 1)
+  }
+
   const used = new Set<string>()
   const out: Record<string, string> = {}
   for (const e of sorted) {
@@ -100,7 +114,10 @@ export function assignEventSlugs(events: SlugInput[]): Record<string, string> {
     const month = MONTHS[d.getUTCMonth()]
     const year = d.getUTCFullYear()
     let slug = `${month}-${year}`
-    if (used.has(slug)) slug = `${month}-${d.getUTCDate()}-${year}`
+    if ((perMonth.get(monthKey(d)) || 0) > 1) {
+      const place = placeSlug(e)
+      slug = `${month}-${d.getUTCDate()}-${year}${place ? `-${place}` : ''}`
+    }
     if (used.has(slug)) {
       let n = 2
       while (used.has(`${slug}-${n}`)) n++
@@ -110,6 +127,24 @@ export function assignEventSlugs(events: SlugInput[]): Record<string, string> {
     out[e.id] = slug
   }
   return out
+}
+
+// An event slug that no longer exists ("october-2026" after a second October
+// event arrived, or "october-21-2026" from before places were added) -> the
+// id of the event it most likely meant, or null.
+export function eventForOldSlug(events: SlugInput[], slugs: Record<string, string>, wanted: string): string | null {
+  const ids = Object.keys(slugs)
+  const prefix = ids.filter((id) => slugs[id].startsWith(`${wanted}-`))
+  if (prefix.length) return prefix.sort((a, b) => slugs[a].localeCompare(slugs[b]))[0]
+  const m = wanted.match(/^([a-z]+)-(\d{4})$/)
+  if (!m || !MONTHS.includes(m[1])) return null
+  const inMonth = events
+    .filter((e) => {
+      const d = slugDate(e)
+      return MONTHS[d.getUTCMonth()] === m[1] && d.getUTCFullYear() === Number(m[2])
+    })
+    .sort((a, b) => slugDate(a).getTime() - slugDate(b).getTime())
+  return inMonth[0]?.id || null
 }
 
 export function eventHref(

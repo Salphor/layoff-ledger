@@ -3,7 +3,7 @@ import json
 import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from match import process_candidate
+from match import ensure_company_keys, process_candidate
 # Shared with run_scan.py so both paths read WARN rows the same way.
 from warn_fields import build_warn_payload
 
@@ -96,7 +96,10 @@ def run_queue_processor():
     started = time.time()
     total = 0
     try:
-        retry_stuck_candidates(conn)
+        # Companies made before matching keys existed get one now (and
+        # duplicates are merged). Instant when there is nothing to do.
+        ensure_company_keys(conn)
+        retry_stuck_candidates(conn, limit=BATCH_SIZE)
 
         # Keep taking batches until the queue is empty or time runs out.
         while time.time() - started < TIME_BUDGET_SECONDS:

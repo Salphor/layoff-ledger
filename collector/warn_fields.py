@@ -16,6 +16,8 @@ import json
 import re
 from datetime import datetime
 
+from company_names import company_key, is_unnamed, resolve_company
+
 # Column-name keywords, checked in order. Names are compared lowercased with
 # punctuation turned into spaces, e.g. "TOTAL_LAYOFF_NUMBER" -> "total layoff number".
 # A keyword matches a column that equals it or contains it; keywords starting
@@ -210,6 +212,16 @@ def normalize_warn_row(row: dict, state: str) -> dict:
     }
 
 
+STATE_NAMES = {
+    "AK": "Alaska", "AL": "Alabama", "AZ": "Arizona", "CA": "California", "CT": "Connecticut",
+    "DE": "Delaware", "IA": "Iowa", "IN": "Indiana", "KS": "Kansas", "KY": "Kentucky",
+    "ME": "Maine", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NJ": "New Jersey",
+    "NY": "New York", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
+    "SC": "South Carolina", "SD": "South Dakota", "UT": "Utah", "VA": "Virginia",
+    "VT": "Vermont", "WA": "Washington", "WI": "Wisconsin",
+}
+
+
 def public_date(notice_date, effective_date):
     """
     The date a WARN record is listed under on the site. Normally the notice
@@ -246,18 +258,32 @@ def build_warn_payload(source: dict) -> dict:
     fields = normalize_warn_row(raw_row, state) if raw_row else {}
 
     title_name = (source.get("title") or "").replace("WARN Notice: ", "")
-    company_name = (
-        fields.get("company")
-        or clean_company(metadata.get("company_name"))
-        or clean_company(title_name)
-        or "Unknown Company"
-    )
+    # The company cell exactly as the state wrote it, then cleaned: site
+    # numbers, HTML, "- Rescinded" and parent groups are handled in
+    # company_names.py so every spelling of one employer lands on one company.
+    raw_company = fields.get("company_raw") or metadata.get("company_name") or title_name
+    company = resolve_company(raw_company)
+    company_name = company["name"] or "Unknown Company"
+    site = company["site"]
+    # Some rows name only a store or office ("#4184 - Portland"). Group them by
+    # the state's WARN number (one filing) instead of inventing a company per store.
+    warn_no = _find(raw_row, ["=warn", "warn number", "warn no", "notice number"]) if raw_row else None
+    if is_unnamed(company["name"]) and warn_no:
+        site = company["name"] if not site else f"{company['name']}; {site}"
+        state_name = STATE_NAMES.get(state, state)
+        company_name = f"{state_name} WARN #{warn_no} (employer not named)"
+        company = dict(company, key=company_key(company_name), unnamed=True)
     headcount = fields.get("headcount") or parse_headcount(metadata.get("affected_count"))
     notice_date = fields.get("notice_date") or parse_date(metadata.get("notice_date"))
     effective_date = fields.get("effective_date") or parse_date(metadata.get("effective_date"))
     location = fields.get("location") or metadata.get("location")
 
-    summary = f"{company_name} filed an official WARN notice with {state}"
+    if company.get("unnamed"):
+        summary = f"An employer not named in {state} WARN notice #{warn_no} reported layoffs"
+    else:
+        summary = f"{company_name} filed an official WARN notice with {state}"
+    if site:
+        summary += f" for {site}"
     summary += f" covering {headcount:,} workers." if headcount else "."
     if effective_date:
         d = datetime.strptime(effective_date, "%Y-%m-%d")
@@ -267,6 +293,10 @@ def build_warn_payload(source: dict) -> dict:
     return {
         "source_id": str(source["source_id"]),
         "company_name": company_name,
+        "company_key": company["key"],
+        "site": site,
+        "rescinded": company["rescinded"],
+        "state": state,
         "headcount": headcount,
         "date_announced": public_date(notice_date, effective_date),
         "notice_date": notice_date,
