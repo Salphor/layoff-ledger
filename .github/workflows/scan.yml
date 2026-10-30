@@ -41,7 +41,10 @@ jobs:
           NODE_OPTIONS: '--no-deprecation'
           SCAN_NEWS: '1'
           SCAN_WARN: '0'
-          GEMINI_BATCH_SIZE: '10'      # articles per Gemini request (20 requests/day free)
+          # Articles are trimmed to 1,200 characters, so 20 per request is small for
+          # Gemini and doubles what the 20-requests-a-day free quota covers.
+          GEMINI_BATCH_SIZE: '20'      # articles per Gemini request
+          SOURCE_LIMIT: '60'           # articles per run (3 requests at most)
           RUN_BUDGET_SECONDS: '660'    # stop starting new work after 11 minutes
         run: |
           python collector/run_scan.py
