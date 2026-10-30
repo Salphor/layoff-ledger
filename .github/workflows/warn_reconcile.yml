@@ -1,0 +1,40 @@
+name: Company Reconcile
+
+# One-off maintenance: re-applies the current company-name rules to every
+# existing company, merges duplicates that now share a key (typos, legal and
+# country suffixes, store/site numbers), and hides events with no identifiable
+# employer ("Unknown"). Reprocesses nothing, so it finishes in under a minute.
+# Shares the queue-processing lock so it never runs alongside the worker.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: queue-processing-worker
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r collector/requirements.txt
+
+      - name: Reconcile Companies
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          NODE_OPTIONS: '--no-deprecation'
+        run: |
+          python collector/reconcile_companies.py

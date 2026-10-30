@@ -6,7 +6,7 @@ import re
 import uuid
 from datetime import date, datetime
 
-from company_names import company_key, resolve_company, slugify
+from company_names import company_key, is_generic_company, resolve_company, slugify
 
 # ---------------------------------------------------------------------------
 # Event-matching rules
@@ -182,6 +182,58 @@ def ensure_company_keys(conn):
         print(f"Company keys: filled {len(todo) - merged}, merged {merged} duplicate companies.", flush=True)
 
 
+def reconcile_companies(conn):
+    """
+    Re-resolve every existing company's name with the current rules, merge
+    duplicates that now share a key, and hide companies with no real employer
+    name ("Unknown" and the like). Fast and idempotent: re-running changes
+    nothing once the data is clean. Does NOT reprocess notices, so it can fix
+    company grouping without the full history import.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT id, canonical_name, name_key FROM companies ORDER BY canonical_name")
+        companies = cur.fetchall()
+
+        hidden = merged = renamed = 0
+        for row in companies:
+            cur.execute("SELECT 1 FROM companies WHERE id = %s", (row["id"],))
+            if not cur.fetchone():
+                continue  # already merged away in this pass
+
+            # No real employer -> hide its events (drops out of the A-Z directory).
+            if is_generic_company(row["canonical_name"]):
+                cur.execute(
+                    """UPDATE layoff_events SET status = 'archived', updated_at = NOW()
+                       WHERE company_id = %s AND status IN ('published','verified','review')""",
+                    (row["id"],),
+                )
+                hidden += 1
+                continue
+
+            resolved = resolve_company(row["canonical_name"])
+            key = resolved["key"] or company_key(row["canonical_name"])
+            name = resolved["name"] or row["canonical_name"]
+
+            cur.execute("SELECT id, canonical_name FROM companies WHERE name_key = %s AND id <> %s LIMIT 1", (key, row["id"]))
+            other = cur.fetchone()
+            if other:
+                cur.execute("UPDATE layoff_events SET company_id = %s WHERE company_id = %s", (other["id"], row["id"]))
+                # Keep the cleaner (shorter) display name on the surviving row.
+                if len(name) < len(other["canonical_name"]):
+                    cur.execute("UPDATE companies SET canonical_name = %s WHERE id = %s", (name, other["id"]))
+                cur.execute("DELETE FROM companies WHERE id = %s", (row["id"],))
+                merged += 1
+            elif key != row["name_key"] or name != row["canonical_name"]:
+                cur.execute("UPDATE companies SET name_key = %s, canonical_name = %s WHERE id = %s", (key, name, row["id"]))
+                cur.execute("SELECT 1 FROM companies WHERE slug = %s AND id <> %s", (slugify(name), row["id"]))
+                if not cur.fetchone():
+                    cur.execute("UPDATE companies SET slug = %s WHERE id = %s", (slugify(name), row["id"]))
+                renamed += 1
+        conn.commit()
+    print(f"Reconcile: merged {merged} duplicate companies, renamed {renamed}, hid {hidden} unnamed companies.", flush=True)
+    return {"merged": merged, "renamed": renamed, "hidden": hidden}
+
+
 def _was_rescinded(cur, key, loc, when) -> bool:
     """A rescission for this company and location within the WARN window?"""
     cur.execute(
@@ -237,6 +289,14 @@ def process_candidate(candidate_id: str):
 
             data = candidate["extracted_json"] or {}
             if not data.get("is_layoff") or not data.get("company_name"):
+                cur.execute("UPDATE candidates SET status = 'rejected' WHERE id = %s", (candidate_id,))
+                conn.commit()
+                return
+
+            # No identifiable employer (Gemini returns "Unknown" and the like for
+            # articles it can't pin to a company). Publishing these lumps unrelated
+            # layoffs together, so skip them. The source stays for a future re-read.
+            if is_generic_company(data.get("company_name")):
                 cur.execute("UPDATE candidates SET status = 'rejected' WHERE id = %s", (candidate_id,))
                 conn.commit()
                 return

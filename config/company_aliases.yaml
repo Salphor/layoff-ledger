@@ -11,8 +11,18 @@
 # are matched automatically. Add a group only when the names really differ.
 # Be careful with short prefixes: "Acme", "Acme Brick Co" and "Acme Markets"
 # are three different companies.
+#
+# DECISION (Oct 2026): we are NOT grouping divisions under a corporate parent
+# for now, e.g. "Tyson Foods" vs "Tyson Fresh Meats", "Optum" vs "Optum Care",
+# "Wells Fargo" vs "Wells Fargo Center" stay as separate companies. Only clear
+# typos, legal/country suffixes and store/site numbers are merged (handled in
+# company_names.py). Revisit this if we later want parent-level rollups.
 
 groups:
+  # Obvious misspelling of an existing company.
+  - parent: Randstad
+    match: ['^ranstad\b']
+
   - parent: Adventist Health
     match: ['^adventist health\b']
 

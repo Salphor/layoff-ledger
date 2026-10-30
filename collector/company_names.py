@@ -32,10 +32,16 @@ import yaml
 ALIASES_FILE = Path(__file__).resolve().parent.parent / "config" / "company_aliases.yaml"
 
 # Legal endings dropped from the matching key (never from the displayed name).
+# Common misspellings are included so "Telecare Corproation" matches "Telecare".
 LEGAL_SUFFIXES = {
-    "inc", "incorporated", "llc", "llp", "lp", "ltd", "limited", "corp",
-    "corporation", "co", "company", "plc", "pc", "pllc", "pa", "na", "lc",
+    "inc", "incorporated", "incorperated", "llc", "llp", "lp", "ltd", "limited",
+    "corp", "corporation", "corproation", "corporaton", "coporation", "co",
+    "company", "comapny", "plc", "pc", "pllc", "pa", "na", "lc",
 }
+
+# Trailing country tags that mark the same company's national arm
+# ("Teva Pharmaceuticals USA" -> "Teva Pharmaceuticals").
+GEO_SUFFIXES = {"usa", "us", "usinc"}
 
 # Legal forms left off the displayed name. "Co"/"Company" stay: "The Walt
 # Disney Company" reads wrong without it.
@@ -86,6 +92,57 @@ def _has_name(text: str) -> bool:
     return len(re.findall(r"[A-Za-z]", text or "")) >= 2
 
 
+# A store / site / building identifier tacked onto a real company name:
+#   "Safeway Store 0378"              -> store number
+#   "Wells Fargo -1755"              -> site code (no space after dash)
+#   "Paramount Global -1575 Gower"   -> site code plus place
+#   "RTX_2022" / "RTX _ 2006 Building E04" -> building code
+#   "Planned Parenthood ..., Inc. 5440"    -> entity number after the legal form
+# Words that mark a trailing site description ("..., Camarillo Campus").
+SITE_WORDS = r"(?:campus|centre|center|facility|plant|warehouse|mill|refinery|terminal|yard|hangar|dc)"
+
+SITE_CODE_PATTERNS = [
+    # "..., Inc. 5440" / "... LLC 2286": an entity number after the legal form.
+    r"[,\s]+(?:inc|llc|lp|llp|corp|co)\.?\s+#?\d{2,}\w*$",
+    # "Safeway Store 0378", "Cepheid Building B1".
+    r"[,\s]+(?:store|site|unit|facility|branch|location|bldg|building|plant)\s+#?[A-Za-z]?\d+\w*$",
+    r"[_\s]*\d{3,}\s+building\s+[\w.]+$",
+    r"\s+building\s+[\w.]+$",
+    # "Kroger-00035", "Kroger-00075-Prime", "Google -1160" (dash + number, maybe more).
+    r"[-–—]\s*\d+(?:[-–—\s]+[\w.&'/]+)*$",
+    r"_\s*\d{3,}\w*$",
+    # "..., Camarillo Campus" / "... Malibu Campus".
+    r",\s+[^,]*\b" + SITE_WORDS + r"$",
+    # A trailing building / unit code like "B1", "E04" (two letters max + digits).
+    r"\s+[A-Za-z]{1,2}\d{1,4}$",
+]
+
+
+def _peel_site_codes(text: str):
+    """Strip a trailing store/site/building code; returns (name, [codes])."""
+    codes = []
+    changed = True
+    while changed:
+        changed = False
+        for pat in SITE_CODE_PATTERNS:
+            m = re.search(pat, text, flags=re.I)
+            if m and _has_name(text[: m.start()]):
+                codes.insert(0, text[m.start():].strip(" ,-–—_"))
+                text = text[: m.start()].rstrip(" ,-–—_")
+                changed = True
+                break
+        if changed:
+            continue
+        # A bare trailing number ("Kaiser Foundation Hospitals 401", "... 90027"):
+        # only when the name has 3+ words left, so "Forever 21" / "Big 5" survive.
+        m = re.search(r"\s+#?\d{2,}$", text)
+        if m and len(text[: m.start()].split()) >= 3 and _has_name(text[: m.start()]):
+            codes.insert(0, text[m.start():].strip(" #"))
+            text = text[: m.start()].rstrip(" ,")
+            changed = True
+    return text, codes
+
+
 def split_company(raw):
     """
     Raw company cell -> {"name", "site", "rescinded"}.
@@ -117,12 +174,17 @@ def split_company(raw):
         if inner and not re.fullmatch(r"\d+", inner):
             sites.insert(0, inner)
 
-    # "Employer - Site" (also en/em dashes). Not when the left side has no
-    # letters ("#3113 - Beaverton" stays whole).
-    m = re.match(r"^(.+?)\s+[-–—]\s+(.+)$", text)
+    # "Employer - Site" / "Employer / Site" (spaces around the separator). Not
+    # when the left side has no letters ("#3113 - Beaverton" stays whole), and
+    # not a bare "/" inside a name ("Planned Parenthood/Orange ...").
+    m = re.match(r"^(.+?)\s+[-–—/|]\s+(.+)$", text)
     if (m and _has_name(m.group(1)) and len(m.group(1)) >= 3
             and m.group(1).strip(" ,").lower() not in US_STATES):
         text, sites = m.group(1).strip(" ,"), [m.group(2).strip()] + sites
+
+    # Trailing store / site / building codes ("Safeway Store 0378" -> "Safeway").
+    text, codes = _peel_site_codes(text)
+    sites = codes + sites
 
     # "State WARN tag" added by very old code: "Acme (WA)" already removed above.
     text = text.strip(" ,;-–—")
@@ -139,13 +201,19 @@ def company_key(name) -> str:
         return ""
     text = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode()
     text = text.lower().replace("&", " and ")
+    text = re.sub(r"\bn\.\s*a\.?\b", " na ", text)    # "N.A." -> national association
+    text = re.sub(r"\bu\.?\s*s\.?\s*a\.?\b", " usa ", text)  # "U.S.A."
     text = re.sub(r"\([^)]*\)", " ", text)          # parentheses
     text = re.sub(r",?\s+d/?b/?a\b.*$", " ", text)   # ", dba Catch Steak"
     text = re.sub(r"[^a-z0-9]+", " ", text)
     words = text.split()
     if words and words[0] == "the" and len(words) > 1:
         words = words[1:]
-    while len(words) > 1 and words[-1] in LEGAL_SUFFIXES:
+    # Drop trailing legal endings and country tags ("Inc", "LLC", "USA", "N.A.").
+    while len(words) > 1 and words[-1] in (LEGAL_SUFFIXES | GEO_SUFFIXES):
+        words.pop()
+    # A dangling "and" left by "& Company" ("Wells Fargo & Company" -> "wellsfargo").
+    while len(words) > 1 and words[-1] == "and":
         words.pop()
     # "l l c" after punctuation was removed
     joined = " ".join(words)
@@ -206,12 +274,12 @@ def resolve_company(raw):
 
 
 # Company cells that name a store or office instead of the employer (Oregon:
-# "#4184 - Portland", "Administrative Office").
-STORE_ONLY = re.compile(r"^#?\s*\d+\s*[-–—:]\s*\S")
+# "#4184 - Portland", "Administrative Office", "Store #128").
+STORE_ONLY = re.compile(r"^(?:store\s+)?#?\s*\d+\s*(?:[-–—:]\s*\S|$)", re.I)
 GENERIC_NAMES = {
     "administrative office", "administrative offices", "corporate office",
     "corporate offices", "headquarters", "main office", "remote employees",
-    "remote employee", "remote employee(s)", "remote workers",
+    "remote employee", "remote employee(s)", "remote workers", "store",
 }
 
 
@@ -221,6 +289,29 @@ def is_unnamed(name) -> bool:
         return True
     text = name.strip().lower()
     return bool(STORE_ONLY.match(text)) or text in GENERIC_NAMES
+
+
+# A company name that carries no real employer: Gemini returns these for
+# articles where it could not identify who was laying people off. Events with
+# such a "company" are hidden (see match.py and reconcile_companies).
+GENERIC_COMPANY = {
+    "unknown", "unknown company", "n a", "not specified", "not provided",
+    "undisclosed", "not disclosed", "confidential", "various",
+    "various companies", "multiple", "multiple companies", "none", "tbd",
+    "not named", "company", "employer", "not available", "unnamed",
+    "redacted", "withheld", "anonymous",
+}
+
+
+def is_generic_company(name) -> bool:
+    """True when the name does not identify a real employer."""
+    if not name:
+        return True
+    text = re.sub(r"[^a-z0-9 ]+", " ", str(name).lower())
+    text = re.sub(r"\s+", " ", text).strip()
+    if text in GENERIC_COMPANY:
+        return True
+    return len(re.findall(r"[a-z]", text)) < 2
 
 
 def slugify(name) -> str:
