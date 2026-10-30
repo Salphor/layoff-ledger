@@ -1,0 +1,12 @@
+# Netlify settings for LayoffLedger.
+# Next.js is detected automatically (no plugin needed).
+
+[build]
+  command = "npm run build"
+  # Skip the build when a commit only changes the data collector, workflows,
+  # database scripts or notes. On Netlify's free plan every production deploy
+  # costs 15 of the 300 monthly credits, and the site is paused if they run out.
+  ignore = "bash scripts/netlify-ignore.sh"
+
+[build.environment]
+  NODE_VERSION = "22"
