@@ -39,9 +39,11 @@ jobs:
           SCAN_WARN: '1'
           RUN_BUDGET_SECONDS: '1500'
           SOURCE_LIMIT: '0'   # only save notices; the hourly worker processes them
-          # 27 states confirmed in the dry run (Oct 28, 2026). Not working yet,
+          # 26 states that return data (checked Oct 2026). Not working yet,
           # because the warn-scraper library's scraper is broken or blocked:
           # CO DC FL HI ID IL MD MI MS ND NM OH RI TN TX (LA, MA need a paid proxy).
-          WARN_STATES: 'ak,al,az,ca,ct,de,ga,ia,in,ks,ky,me,mo,mt,ne,nj,ny,ok,or,pa,sc,sd,ut,va,vt,wa,wi'
+          # GA removed Oct 30, 2026: it only returns an old archive (nothing
+          # since 2025), and its scraper sends a browser user agent.
+          WARN_STATES: 'ak,al,az,ca,ct,de,ia,in,ks,ky,me,mo,mt,ne,nj,ny,ok,or,pa,sc,sd,ut,va,vt,wa,wi'
         run: |
           python collector/run_scan.py

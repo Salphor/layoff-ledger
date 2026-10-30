@@ -46,12 +46,12 @@ class LayoffExtraction(BaseModel):
 class BatchExtractionResponse(BaseModel):
     extractions: List[LayoffExtraction] = Field(default_factory=list)
 
-# Each attempt counts against the 20-requests-per-day free quota, so retry only
-# temporary errors, at most 3 tries in total, and never a quota error.
+# Each attempt counts against the 20-requests-per-day free quota, so retry a
+# temporary error only once (2 tries in total), and never a quota error.
 @retry(
     retry=retry_if_exception(_is_temporary_error),
-    wait=wait_exponential(multiplier=2, min=5, max=20),
-    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=10, max=30),
+    stop=stop_after_attempt(2),
     reraise=True,
 )
 def extract_layoff_facts(batch_content: str) -> List[LayoffExtraction]:

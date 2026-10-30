@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from adapters.google_news_rss import GoogleNewsAdapter
 from adapters.state_warn import StateWarnAdapter
-from extract import GeminiQuotaExhausted, extract_layoff_facts
+from extract import GeminiQuotaExhausted, _is_temporary_error, extract_layoff_facts
 from match import process_candidate
 from warn_fields import build_warn_payload
 
@@ -261,6 +261,13 @@ async def run_pipeline():
                 break
             except Exception as e:
                 print(f"Batch extraction failed for batch starting at index {i}. Error: {str(e)[:300]}", flush=True)
+                if _is_temporary_error(e):
+                    # Gemini is overloaded (503). The next batches would almost
+                    # certainly fail too, and every failed try uses up part of
+                    # the 20-a-day quota. These articles stay unread and are
+                    # picked up by the next run.
+                    print("Gemini is busy; stopping here so the daily quota isn't spent on failed tries.", flush=True)
+                    break
                 continue
 
             saved = 0
